@@ -33,5 +33,5 @@ outputs/
 .DS_Store
 Thumbs.db
 
-# Notebooks
-notebooks/personal/
+# Personal notes (not for repo)
+notes/personal/
