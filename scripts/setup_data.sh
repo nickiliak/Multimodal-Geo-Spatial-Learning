@@ -27,5 +27,5 @@ if [ ! -f "$EDA_NOTEBOOK" ]; then
 fi
 
 echo "Running EDA notebook..."
-jupyter nbconvert --to notebook --execute --inplace "$EDA_NOTEBOOK"
+uv run jupyter nbconvert --to notebook --execute --inplace "$EDA_NOTEBOOK"
 echo "EDA notebook executed successfully."
