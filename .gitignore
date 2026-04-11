@@ -33,5 +33,6 @@ outputs/
 .DS_Store
 Thumbs.db
 
-# Personal notes (not for repo)
-notes/personal/
+# Claude
+CLAUDE.md
+
