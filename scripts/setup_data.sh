@@ -26,6 +26,12 @@ if [ ! -f "$EDA_NOTEBOOK" ]; then
   exit 1
 fi
 
-echo "Running EDA notebook..."
-uv run jupyter nbconvert --to notebook --execute --inplace "$EDA_NOTEBOOK"
-echo "EDA notebook executed successfully."
+echo "EDA notebook already executed. Re-run? [y/N] "
+read -r response
+if [[ "$response" =~ ^[Yy]$ ]]; then
+  echo "Running EDA notebook..."
+  uv run jupyter nbconvert --to notebook --execute --inplace "$EDA_NOTEBOOK"
+  echo "EDA notebook executed successfully."
+else
+  echo "Skipping EDA notebook."
+fi
