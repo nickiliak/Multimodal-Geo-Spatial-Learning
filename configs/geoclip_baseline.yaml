@@ -1,0 +1,14 @@
+# GeoClip zero-shot baseline configuration
+
+data:
+  root: "data/MML_Data"
+
+gallery:
+  include_index: false  # set true for ablation with 101K index GPS
+
+inference:
+  batch_size: 64
+  device: "cuda"
+
+evaluation:
+  thresholds_km: [1, 25, 200, 750, 2500]

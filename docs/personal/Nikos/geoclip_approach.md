@@ -69,13 +69,40 @@ street-level (1km) accuracy: 21K → 11.88%, 1M → 13.98% on Im2GPS3k.
 
 ---
 
-## 2. MMlandmarks Dataset — Relevant Characteristics
+## 2. Environment & HPC Setup
+
+**Package manager:** `uv` — all commands use `uv run`.
+
+```bash
+# Install dependencies
+uv sync
+
+# Install package in editable mode (required for src/ imports)
+uv pip install -e .
+
+# Execute a notebook in-place on HPC
+uv run jupyter nbconvert --to notebook --execute --inplace notebooks/team/<notebook>.ipynb
+```
+
+**Data location:** DTU HPC only — `/dtu/blackhole/02/137570/MML`. Local machines have no access.
+
+```bash
+# First-time HPC setup — creates data/MML_Data symlink
+bash scripts/setup_data.sh
+```
+
+All data access goes through `data/MML_Data/`. Any code reading data must run on HPC or be
+guarded with a path existence check.
+
+---
+
+## 3. MMlandmarks Dataset — Relevant Characteristics
 
 | Property | Value |
 |----------|-------|
 | Train landmarks | 17,557 (all 4 modalities: ground, satellite, text, GPS) |
 | Query landmarks | 1,000 (disjoint from train, used for evaluation) |
-| Index images | 101,302 (GLDv2 images with lat/lon, for retrieval) |
+| Index images | 101,302 (satellite images with GPS, for gallery extension) |
 | Ground images | JPEG, 800×600 px, ~11.9 per landmark (train median 9) |
 | Satellite images | PNG, 800×800 px, ~12.8 per landmark |
 | Text descriptions | JSON (Wikipedia/Commons), 1 per landmark |
@@ -83,17 +110,18 @@ street-level (1km) accuracy: 21K → 11.88%, 1M → 13.98% on Im2GPS3k.
 | Geographic scope | Primarily USA (lat ~18–50°N, lon ~−157° to −67°W) |
 | Category imbalance | Gini ~0.5; top-5 categories ≈ 40% of landmarks |
 
-**Key splits for baseline:**
-- `train/mml_train.csv` → landmark_id, lat, lon (GPS gallery + training labels)
-- `query/mml_query.csv` → landmark_id, lat, lon (ground-truth for evaluation)
-- `query/mml_query_ground.csv` → query image IDs (input to model)
-- `index/mml_index_satellite.csv` → lat, lon per index image (optional gallery extension)
+**Key splits for baseline** (all under `data/MML_Data/`)**:**
+- `train/mml_train.csv` — 17,557 landmarks with lat/lon + image IDs (GPS gallery + training labels)
+- `query/mml_query.csv` — 1,000 query landmarks with ground-truth GPS
+- `query/mml_query_ground.csv` — query image IDs (input to model)
+- `index/mml_index_satellite.csv` — 101,302 index images with GPS (optional gallery extension)
+- `train/ground/`, `train/satellite/` — image directories
 
 ---
 
-## 3. Baseline Strategy
+## 4. Baseline Strategy
 
-### 3.1 Why GeoClip fits here
+### 4.1 Why GeoClip fits here
 
 - GeoClip's image encoder is CLIP ViT/L-14 — pretrained on internet images including
   landmark photos. Zero-shot performance on our domain is plausible.
@@ -101,17 +129,17 @@ street-level (1km) accuracy: 21K → 11.88%, 1M → 13.98% on Im2GPS3k.
   query images are the probes.
 - The US-centric geography means fine-tuning on our domain should yield measurable gains.
 
-### 3.2 Two-Phase Plan
+### 4.2 Two-Phase Plan
 
 #### Phase 1 — Zero-Shot Baseline (pretrained GeoClip, no fine-tuning)
 
 **Goal:** Measure out-of-the-box performance as lower bound.
 
-1. Install: `pip install geoclip`
-2. Build GPS gallery from `mml_train.csv` (17,557 coordinates).
-   Optionally add `mml_index_satellite.csv` (101,302 coords) for denser coverage.
+1. Add the geoclip package: `uv add geoclip` (then `uv sync` to install)
+2. Build GPS gallery from `data/MML_Data/train/mml_train.csv` (17,557 coordinates).
+   Optionally add `data/MML_Data/index/mml_index_satellite.csv` (101,302 coords) for denser coverage.
 3. For each of the 1,000 query landmarks:
-   - Pick one ground image from `query/ground/` (e.g., first listed in `mml_query_ground.csv`)
+   - Pick one ground image from `data/MML_Data/query/ground/` (first listed in `data/MML_Data/query/mml_query_ground.csv`)
    - Get image embedding via pretrained GeoClip image encoder
    - Retrieve top-1 GPS from gallery by cosine similarity
 4. Compute accuracy @ {1, 25, 200, 750, 2500} km (Haversine distance).
@@ -125,7 +153,7 @@ Country-level (750km) should be reasonable if the model recognizes US landmarks.
 **Goal:** Improve performance by adapting Location Encoder (and linear image head) to our
 landmark distribution.
 
-1. Build a PyTorch Dataset from `mml_train.csv` + `train/ground/`:
+1. Build a PyTorch Dataset from `data/MML_Data/train/mml_train.csv` + `data/MML_Data/train/ground/`:
    - Each sample: (image path, lat, lon)
    - One random ground image per landmark per epoch
    - CLIP preprocessing: resize to 224×224, normalize with CLIP stats
@@ -140,15 +168,17 @@ landmark distribution.
 
 ---
 
-## 4. Proposed Code Structure
+## 5. Proposed Code Structure
 
 ```
 src/mmgeo/geolocalizations/
 ├── __init__.py
-├── dataset.py              # MMLandmarksDataset (image + GPS, ground modality)
-├── geoclip_baseline.py     # Zero-shot inference: build gallery, predict, batch query
-├── evaluate.py             # haversine(), accuracy_at_thresholds()
-└── train_geoclip.py        # Fine-tuning loop with contrastive loss + dynamic queue
+└── geoclip/
+    ├── __init__.py
+    ├── dataset.py              # MMLandmarksDataset (image + GPS, ground modality)
+    ├── geoclip_baseline.py     # Zero-shot inference: build gallery, predict, batch query
+    ├── evaluate.py             # haversine(), accuracy_at_thresholds()
+    └── train_geoclip.py        # Fine-tuning loop with contrastive loss + dynamic queue
 
 configs/
 └── geoclip_baseline.yaml   # Paths, hyperparameters, gallery choice
@@ -159,7 +189,7 @@ notebooks/team/
 
 ---
 
-## 5. Evaluation Protocol
+## 6. Evaluation Protocol
 
 **Metric:** Accuracy @ k km — fraction of query landmarks where the predicted GPS is within
 k km of ground truth.
@@ -180,7 +210,7 @@ k km of ground truth.
 
 ---
 
-## 6. Key Implementation Notes
+## 7. Key Implementation Notes
 
 - **CLIP frozen**: Only the linear image head and Location Encoder are trainable. This
   keeps training fast (~few hours on a single GPU for 17K samples).
@@ -195,7 +225,7 @@ k km of ground truth.
 
 ---
 
-## 7. Future Extensions (post-baseline)
+## 8. Future Extensions (post-baseline)
 
 | Extension | What changes |
 |-----------|-------------|
@@ -207,7 +237,7 @@ k km of ground truth.
 
 ---
 
-## 8. References
+## 9. References
 
 - Vivanco et al., "GeoClip: Clip-Inspired Alignment between Locations and Images for
   Effective Worldwide Geo-localization", NeurIPS 2023.
