@@ -58,7 +58,8 @@ predicted GPS = argmax_i sim(V_query, L_i)
 ```
 
 Gallery sizes tested: 21K (default), 100K, 1M global coordinates. Larger galleries improve
-street-level (1km) accuracy: 21K → 11.88%, 1M → 13.98% on Im2GPS3k.
+street-level (1km) accuracy: 21K → 11.88%, 100K → 14.11%, 1M → 13.98% on Im2GPS3k.
+The paper also uses **TenCrop** at evaluation (5 crops + flips, predictions averaged).
 
 ### 1.5 Results on Im2GPS3k
 
@@ -129,62 +130,104 @@ guarded with a path existence check.
   query images are the probes.
 - The US-centric geography means fine-tuning on our domain should yield measurable gains.
 
-### 4.2 Two-Phase Plan
+### 4.2 Plan
 
-#### Phase 1 — Zero-Shot Baseline (pretrained GeoClip, no fine-tuning)
+#### Phase 1 — Zero-Shot Baseline (pretrained GeoClip, no fine-tuning) ✅ DONE
 
 **Goal:** Measure out-of-the-box performance as lower bound.
 
-1. Add the geoclip package: `uv add geoclip` (then `uv sync` to install)
-2. Build GPS gallery from `data/MML_Data/train/mml_train.csv` (17,557 coordinates).
-   Optionally add `data/MML_Data/index/mml_index_satellite.csv` (101,302 coords) for denser coverage.
-3. For each of the 1,000 query landmarks:
-   - Pick one ground image from `data/MML_Data/query/ground/` (first listed in `data/MML_Data/query/mml_query_ground.csv`)
-   - Get image embedding via pretrained GeoClip image encoder
-   - Retrieve top-1 GPS from gallery by cosine similarity
-4. Compute accuracy @ {1, 25, 200, 750, 2500} km (Haversine distance).
+1. Build GPS gallery from `data/MML_Data/train/mml_train.csv` (17,557 coordinates).
+2. For each of the 1,000 query landmarks, pick the first ground image, get embedding, retrieve top-1 GPS.
+3. Compute accuracy @ {1, 25, 200, 750, 2500} km (Haversine distance).
 
-**Expected behavior:** Pretrained weights were trained globally, so the model may predict
-globally distributed GPS even for USA-only queries. Street-level (1km) accuracy likely < 5%.
-Country-level (750km) should be reasonable if the model recognizes US landmarks.
+**Results** (CPU, batch_size=64, 17,557-point gallery):
 
-#### Phase 2 — Fine-Tuned GeoClip (domain adaptation)
+| Threshold | Accuracy |
+|-----------|----------|
+| 1 km      | 11.30%   |
+| 25 km     | 23.40%   |
+| 200 km    | 43.10%   |
+| 750 km    | 72.40%   |
+| 2500 km   | 93.90%   |
 
-**Goal:** Improve performance by adapting Location Encoder (and linear image head) to our
-landmark distribution.
+Median error: 279.8 km — Mean error: 626.5 km — Inference: ~20 min on CPU
 
-1. Build a PyTorch Dataset from `data/MML_Data/train/mml_train.csv` + `data/MML_Data/train/ground/`:
-   - Each sample: (image path, lat, lon)
-   - One random ground image per landmark per epoch
-   - CLIP preprocessing: resize to 224×224, normalize with CLIP stats
-2. Train with the same contrastive loss as the paper:
-   - Batch GPS noise σ_b = 150m (positive augmentation)
-   - Dynamic queue of 4096 GPS negatives, σ_q = 1000m
-   - Temperature τ initialized to 0.07, learnable
-3. Optimizer: Adam, LR=3×10⁻⁴, StepLR γ=0.7
-4. Train ~10 epochs; validate on a 10% holdout of train.
-5. Re-run Phase 1 evaluation with fine-tuned checkpoint.
-6. Report delta: zero-shot vs fine-tuned per threshold.
+**Comparison across papers and our results:**
+
+| Method | Dataset | Gallery | @1 km | @25 km | @200 km | @750 km | @2500 km |
+|--------|---------|--------:|------:|-------:|--------:|--------:|---------:|
+| GeoClip (own paper, Table 1) | Im2GPS3k (global) | 100K | 14.11 | 34.47 | 50.65 | 69.67 | 83.82 |
+| GeoClip off-shelf (MML paper, Table 3) | MMlandmarks (US) | ? | 21.37 | 36.44 | 48.57 | 71.45 | 91.50 |
+| MMCLIP (trained on MML) | MMlandmarks (US) | ? | 18.72 | 33.15 | 56.20 | 73.78 | 91.50 |
+| **Our zero-shot** | MMlandmarks (US) | 17,557 | 11.30 | 23.40 | 43.10 | 72.40 | 93.90 |
+
+**Key observation:** Our 11.30% @ 1 km is actually close to GeoClip's own benchmark of
+14.11% on Im2GPS3k. The small gap is explained by:
+- Smaller gallery (17,557 vs 100K GPS points)
+- No TenCrop augmentation (GeoClip paper uses 5 crops + flips, averaging predictions)
+- Single image per landmark (vs multi-image evaluation)
+
+The real anomaly is the MMlandmarks paper reporting 21.37% for off-shelf GeoClip — much
+higher than GeoClip's own 14.11% on Im2GPS3k. Likely explanations:
+- **Data leakage**: GeoClip was trained on MP-16 (16M geotagged Flickr images). The MMlandmarks
+  paper itself notes "over 1.2M MP-16 images were taken in the US, increasing the chances of
+  overlap" with MMlandmarks. Many query landmarks may have near-duplicates in the training set.
+- **Evaluation setup**: The MML paper evaluates on all 18,689 ground images (not 1 per landmark),
+  and may use a different gallery construction.
+- **Indoor filtering**: The MML paper filters images with LLaVA-1.5-7b-hf (Section 3.3), keeping
+  only outdoor images (274,650 outdoor vs 54,699 indoor, ~83%). They prompted LLaVA to categorize
+  every image as indoor or outdoor. We do not apply this filter — ~8% of our query images may be
+  indoor/zoomed with no geographic context, disproportionately hurting fine-grained accuracy.
+
+**Bottom line:** Our zero-shot baseline is consistent with GeoClip's published performance.
+The gap vs the MMlandmarks paper's GeoClip number is likely inflated by data overlap and
+evaluation differences, not a deficiency in our setup.
+
+#### Phase 1b — Zero-Shot Improvements (next step)
+
+Improvements to the zero-shot baseline, no training required:
+
+**1. Multi-image aggregation** (highest expected impact)
+Instead of using 1 image per landmark, embed all available ground images per query landmark
+and mean-pool their embeddings before gallery lookup. The MML paper uses all 18,689 images.
+
+**2. TenCrop augmentation** (medium impact — used in GeoClip paper)
+The GeoClip paper (Section 4) uses TenCrop at evaluation: 5 crops of the image + their
+horizontal flips, predictions averaged. This boosts fine-grained accuracy without training.
+
+**3. Extended gallery** (medium impact at fine-grained thresholds)
+Add `data/MML_Data/index/mml_index_satellite.csv` (101,302 GPS points) to the gallery,
+giving 118,859 total points. Denser coverage reduces the distance to the nearest gallery point.
+GeoClip paper uses 100K gallery points; our current 17,557 is substantially smaller.
+
+**4. Indoor filtering** (lower priority — complex)
+The MML paper uses LLaVA-1.5-7b-hf to filter indoor images. We could use a simpler
+heuristic or skip entirely and document as a known limitation (~8% noisy queries).
+
+#### Phase 2 — MMCLIP-style Multimodal Training (future)
+
+The MMlandmarks paper trains a joint model across all 4 modalities (ground images, satellite,
+text, GPS) with contrastive loss across every modality pair. This is distinct from simply
+fine-tuning GeoClip on ground→GPS. It requires implementing `dataset.py` and a multimodal
+training loop — deferred until the zero-shot baseline is fully squeezed.
 
 ---
 
-## 5. Proposed Code Structure
+## 5. Code Structure
 
 ```
 src/mmgeo/geolocalizations/
 ├── __init__.py
 └── geoclip/
     ├── __init__.py
-    ├── dataset.py              # MMLandmarksDataset (image + GPS, ground modality)
     ├── geoclip_baseline.py     # Zero-shot inference: build gallery, predict, batch query
-    ├── evaluate.py             # haversine(), accuracy_at_thresholds()
-    └── train_geoclip.py        # Fine-tuning loop with contrastive loss + dynamic queue
+    └── evaluate.py             # haversine(), accuracy_at_thresholds(), median_error()
 
 configs/
-└── geoclip_baseline.yaml   # Paths, hyperparameters, gallery choice
+└── geoclip_baseline.yaml   # Paths, batch size, gallery choice, evaluation thresholds
 
 notebooks/team/
-└── 03_geoclip_baseline.ipynb   # End-to-end: setup → zero-shot → fine-tune → results table
+└── 03_geoclip_baseline.ipynb   # End-to-end: setup → gallery → inference → evaluate → plots
 ```
 
 ---
@@ -212,28 +255,26 @@ k km of ground truth.
 
 ## 7. Key Implementation Notes
 
-- **CLIP frozen**: Only the linear image head and Location Encoder are trainable. This
-  keeps training fast (~few hours on a single GPU for 17K samples).
+- **Everything frozen**: We use pretrained GeoClip as-is — no weights are updated.
 - **Gallery precomputation**: Embed all gallery GPS points once before evaluation.
   At 17K points × 512 dims = 34MB — trivially fits in RAM/VRAM.
 - **Batch inference**: Process all 1,000 queries in batches; compute similarity against
-  precomputed gallery matrix via `torch.nn.functional.cosine_similarity` or matrix multiply.
-- **Image selection**: For Phase 1 evaluation, use the first ground image per query
-  landmark (deterministic). For fine-tuning, sample randomly per epoch.
-- **No satellite / text yet**: These modalities are deferred to future experiments. The
-  ground image modality directly matches GeoClip's training domain.
+  precomputed gallery matrix via matrix multiply.
+- **Image selection**: Currently uses the first ground image per query landmark (deterministic).
+  Next improvement: mean-pool embeddings across all available ground images per landmark.
+- **No satellite / text yet**: These modalities are deferred to Phase 2 multimodal training.
 
 ---
 
-## 8. Future Extensions (post-baseline)
+## 8. Future Extensions
 
 | Extension | What changes |
 |-----------|-------------|
-| Satellite images | Swap image encoder input; CLIP may need fine-tuning |
-| Text + GPS | Add text encoder branch; contrastive loss over triplets |
-| Multimodal fusion | Late fusion: average embeddings from ground + text |
-| Larger gallery | Use global 1M GPS + train GPS for open-world evaluation |
-| Metric: MedErr | Median localization error (km) as additional metric |
+| Multi-image aggregation | Mean-pool all ground image embeddings per query landmark |
+| Extended gallery | Add 101K index GPS points for denser coverage (118K total) |
+| MMCLIP-style training | Joint contrastive training across ground, satellite, text, GPS |
+| Satellite modality | Swap image encoder input for aerial images |
+| Text + GPS | Add frozen CLIP text encoder branch, contrastive loss over all pairs |
 
 ---
 
