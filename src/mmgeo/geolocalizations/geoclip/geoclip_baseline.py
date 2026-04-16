@@ -164,3 +164,42 @@ def load_query_data(
     true_coords = merged[["lat", "lon"]].values
     landmark_ids = merged["landmark_id"].values
     return image_paths, true_coords, landmark_ids
+
+
+def load_train_data(
+    data_root: Path,
+) -> tuple[list[Path], np.ndarray, np.ndarray]:
+    """Load train  image paths, ground-truth coordinates, and landmark IDs.
+
+    Picks the first ground image per train landmark. Image paths use the
+    3-level hex-prefix sharding scheme: ``ground/{h[0]}/{h[1]}/{h[2]}/{h}.jpg``.
+
+    Returns
+    -------
+    image_paths : list[Path]
+        One image path per query landmark.
+    true_coords : np.ndarray, shape (n, 2)
+        Ground-truth ``[[lat, lon], ...]``.
+    landmark_ids : np.ndarray, shape (n,)
+    """
+    train_df = pd.read_csv(data_root / "train" / "mml_train.csv")
+    ground_df = pd.read_csv(data_root / "train" / "mml_train_ground.csv")
+    merged = train_df.merge(ground_df, on="landmark_id")
+
+    image_paths: list[Path] = []
+    for _, row in merged.iterrows():
+        hex_id = str(row["images"]).split()[0]
+        path = (
+            data_root
+            / "train"
+            / "ground"
+            / hex_id[0]
+            / hex_id[1]
+            / hex_id[2]
+            / f"{hex_id}.jpg"
+        )
+        image_paths.append(path)
+
+    true_coords = merged[["lat", "lon"]].values
+    landmark_ids = merged["landmark_id"].values
+    return image_paths, true_coords, landmark_ids
