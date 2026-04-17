@@ -1,0 +1,93 @@
+Job started at Fri Apr 17 00:57:05 CEST 2026
+Running on n-62-20-11
+Fri Apr 17 00:57:05 2026       
++-----------------------------------------------------------------------------------------+
+| NVIDIA-SMI 580.126.20             Driver Version: 580.126.20     CUDA Version: 13.0     |
++-----------------------------------------+------------------------+----------------------+
+| GPU  Name                 Persistence-M | Bus-Id          Disp.A | Volatile Uncorr. ECC |
+| Fan  Temp   Perf          Pwr:Usage/Cap |           Memory-Usage | GPU-Util  Compute M. |
+|                                         |                        |               MIG M. |
+|=========================================+========================+======================|
+|   0  Tesla V100-SXM2-32GB           On  |   00000000:3A:00.0 Off |                    0 |
+| N/A   34C    P0             54W /  300W |       0MiB /  32768MiB |      0%   E. Process |
+|                                         |                        |                  N/A |
++-----------------------------------------+------------------------+----------------------+
+
++-----------------------------------------------------------------------------------------+
+| Processes:                                                                              |
+|  GPU   GI   CI              PID   Type   Process name                        GPU Memory |
+|        ID   ID                                                               Usage      |
+|=========================================================================================|
+|  No running processes found                                                             |
++-----------------------------------------------------------------------------------------+
+Device: cuda
+[MMLCrossViewDataset] split=train, landmarks=17557, ground_imgs=310661, sat_imgs=186574
+[CrossViewModel] backbone=convnext_tiny.fb_in22k, feature_dim=768, embed_dim=768, params=27.8M
+
+Starting training: 20 epochs, batch_size=64
+Backbone: convnext_tiny.fb_in22k, LR: 0.001
+============================================================
+
+Job finished at Fri Apr 17 00:57:36 CEST 2026
+
+------------------------------------------------------------
+Sender: LSF System <lsfadmin@hpc.dtu.dk>
+Subject: Job 28227410: <crossview_train> in cluster <dcc> Done
+
+Job <crossview_train> was submitted from host <hpclogin1> by user <s250778> in cluster <dcc> at Fri Apr 17 00:47:43 2026
+Job was executed on host(s) <4*n-62-20-11>, in queue <gpuv100>, as user <s250778> in cluster <dcc> at Fri Apr 17 00:57:03 2026
+</zhome/b0/c/220061> was used as the home directory.
+</zhome/b0/c/220061/Multimodal-Geo-Spatial-Learning> was used as the working directory.
+Started at Fri Apr 17 00:57:03 2026
+Terminated at Fri Apr 17 00:57:36 2026
+Results reported at Fri Apr 17 00:57:36 2026
+
+Your job looked like:
+
+------------------------------------------------------------
+# LSBATCH: User input
+#!/bin/bash
+#BSUB -J crossview_train
+#BSUB -q gpuv100
+#BSUB -gpu "num=1:mode=exclusive_process"
+#BSUB -n 4
+#BSUB -R "span[hosts=1] rusage[mem=16GB]"
+#BSUB -W 4:00
+#BSUB -o logs/crossview_train_%J.out
+#BSUB -e logs/crossview_train_%J.err
+
+mkdir -p logs
+cd ~/Multimodal-Geo-Spatial-Learning
+
+echo "Job started at $(date)"
+echo "Running on $(hostname)"
+nvidia-smi
+
+uv run python -m mmgeo.crossview.train --config configs/crossview_baseline.yaml
+
+echo "Job finished at $(date)"
+------------------------------------------------------------
+
+Successfully completed.
+
+Resource usage summary:
+
+    CPU time :                                   51.00 sec.
+    Max Memory :                                 330 MB
+    Average Memory :                             330.00 MB
+    Total Requested Memory :                     65536.00 MB
+    Delta Memory :                               65206.00 MB
+    Max Swap :                                   -
+    Max Processes :                              5
+    Max Threads :                                9
+    Run time :                                   33 sec.
+    Turnaround time :                            593 sec.
+
+The output (if any) is above this job summary.
+
+
+
+PS:
+
+Read file <logs/crossview_train_28227410.err> for stderr output of this job.
+

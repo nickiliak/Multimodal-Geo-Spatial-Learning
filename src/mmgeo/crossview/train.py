@@ -186,19 +186,24 @@ def _run_eval(
     device: torch.device,
     cfg: dict,
 ) -> dict[int, float]:
-    """Run ground→satellite retrieval evaluation on the query/index split."""
+    """Run ground→satellite retrieval evaluation.
+    
+    Queries: ground images from query split (landmark_id known)
+    Index: satellite images from query split (landmark_id known)
+    Match is correct if retrieved image shares landmark_id with query.
+    """
     eval_transform = get_eval_transforms(img_size)
     eval_batch = cfg["training"].get("eval_batch_size", 128)
 
-    # Query: ground images from query split
+    # Both query and index come from the query split
+    # query ground → retrieve from query satellite
     query_ds = MMLImageDataset(data_root, "query", "ground", transform=eval_transform)
     query_loader = DataLoader(
         query_ds, batch_size=eval_batch, shuffle=False,
         num_workers=4, pin_memory=True,
     )
 
-    # Index: satellite images from index split
-    index_ds = MMLImageDataset(data_root, "index", "satellite", transform=eval_transform)
+    index_ds = MMLImageDataset(data_root, "query", "satellite", transform=eval_transform)
     index_loader = DataLoader(
         index_ds, batch_size=eval_batch, shuffle=False,
         num_workers=4, pin_memory=True,
