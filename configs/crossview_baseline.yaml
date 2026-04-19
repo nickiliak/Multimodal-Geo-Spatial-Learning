@@ -42,3 +42,10 @@ hard_negatives:
 
 device: "cuda"
 save_dir: "checkpoints/crossview"
+
+# Versioned experiment outputs (config copy, metrics CSV/JSON, summary.md, checkpoints)
+logging:
+  runs_root: "checkpoints/crossview"   # parent dir for timestamped run folders
+  run_prefix: "cv_v2_"                  # prepended to run dir name (model-family tag)
+  run_tag: null                         # optional suffix, e.g. "convnext_tiny_hn"
+  selection_metric: "g2s_recall@1"      # flat eval key used to pick best epoch

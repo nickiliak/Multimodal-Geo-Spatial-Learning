@@ -38,6 +38,7 @@ from mmgeo.crossview.dataset import (
     get_train_transforms,
 )
 from mmgeo.crossview.evaluate import evaluate_crossview
+from mmgeo.crossview.logging_utils import RunLogger
 from mmgeo.crossview.losses import SymmetricInfoNCE
 from mmgeo.crossview.model import CrossViewModel
 from mmgeo.crossview.sampling import (
@@ -230,12 +231,20 @@ def train(cfg: dict) -> None:
     else:
         scheduler = CosineAnnealingLR(optimizer, T_max=epochs, eta_min=lr * min_lr_ratio)
 
-    # ---- Training loop ----
-    save_dir = Path(cfg.get("save_dir", "checkpoints/crossview"))
-    save_dir.mkdir(parents=True, exist_ok=True)
+    # ---- Run directory + logger ----
+    logging_cfg = cfg.get("logging", {}) or {}
+    runs_root = Path(logging_cfg.get("runs_root", cfg.get("save_dir", "checkpoints/crossview")))
+    run_tag = logging_cfg.get("run_tag")
+    logger = RunLogger(
+        root_dir=runs_root,
+        cfg=cfg,
+        run_prefix=logging_cfg.get("run_prefix"),
+        run_tag=run_tag,
+        selection_metric=logging_cfg.get("selection_metric", "g2s_recall@1"),
+    )
+    save_dir = logger.run_dir
 
     eval_every = cfg["training"].get("eval_every", 5)
-    best_recall = 0.0
 
     print(f"\nStarting training: {epochs} epochs, batch_size={batch_size}")
     print(f"Backbone: {backbone}, LR: {lr}")
@@ -276,15 +285,21 @@ def train(cfg: dict) -> None:
             f"time={elapsed:.1f}s"
         )
 
+        logger.log_train(
+            epoch=epoch,
+            metrics=train_metrics,
+            extra={"temperature": temp, "lr": lr_now, "epoch_seconds": elapsed},
+        )
+
         # ---- Periodic evaluation ----
         if epoch % eval_every == 0 or epoch == epochs:
             eval_results = _run_eval(model, data_root, img_size, device, cfg)
 
-            # Use g2s Recall@1 as the checkpoint selection signal
-            g2s = eval_results.get("g2s", {})
-            r1 = g2s.get("recall@1", 0.0)
-            if r1 > best_recall:
-                best_recall = r1
+            prev_best_epoch = logger.best["epoch"]
+            logger.log_eval(epoch, eval_results)
+
+            # Save best checkpoint whenever the logger advanced the best epoch
+            if logger.best["epoch"] == epoch and prev_best_epoch != epoch:
                 ckpt_path = save_dir / "best.pt"
                 torch.save({
                     "epoch": epoch,
@@ -292,15 +307,17 @@ def train(cfg: dict) -> None:
                     "metrics": eval_results,
                     "config": cfg,
                 }, ckpt_path)
-                print(f"  → New best! g2s R@1={r1:.4f}, saved to {ckpt_path}")
+                print(f"  → New best! {logger.selection_metric}={logger.best['score']:.4f}, saved to {ckpt_path}")
 
-    # Save final checkpoint
+    # Save final checkpoint + finalize run outputs
     torch.save({
         "epoch": epochs,
         "model_state_dict": model.state_dict(),
         "config": cfg,
     }, save_dir / "last.pt")
-    print(f"\nTraining complete. Best R@1: {best_recall:.4f}")
+    logger.finalize()
+    best_score = logger.best["score"] if logger.best["epoch"] is not None else float("nan")
+    print(f"\nTraining complete. Best {logger.selection_metric}: {best_score:.4f}")
 
 
 def _maybe_refresh_hard_negatives(
