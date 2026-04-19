@@ -147,12 +147,15 @@ def train(cfg: dict) -> None:
         gps_neighbors = build_gps_neighbors(coords, k=neighbor_pool)
         print(f"[HardNeg] GPS neighbor table: {gps_neighbors.shape}")
 
+        iters_per_epoch_cfg = hn_cfg.get("iters_per_epoch")
         train_sampler = HardNegativeBatchSampler(
             neighbor_table=gps_neighbors,
             batch_size=batch_size,
             pool_size=pool_size,
+            iters_per_epoch=iters_per_epoch_cfg,
             seed=cfg.get("seed"),
         )
+        print(f"[HardNeg] iters_per_epoch={train_sampler.iters_per_epoch}")
         hn_state = {
             "gps_neighbors": gps_neighbors,
             "neighbor_pool": neighbor_pool,

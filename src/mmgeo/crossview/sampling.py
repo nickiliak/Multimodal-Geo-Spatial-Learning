@@ -206,11 +206,13 @@ def build_similarity_neighbors(
 class HardNegativeBatchSampler(Sampler):
     """Yield batches where all landmarks are mutual hard negatives.
 
-    Each epoch, every landmark appears exactly once as the "seed" of some
-    batch. The rest of the batch is drawn (without replacement) from the
-    seed's top-``pool_size`` neighbors in ``neighbor_table``. If a seed's
-    pool is too small, the shortfall is filled by random landmarks so every
-    batch has exactly ``batch_size`` items.
+    Each epoch, ``iters_per_epoch`` batches are emitted. Seeds are drawn
+    without replacement from a fresh random permutation of the landmarks;
+    if ``iters_per_epoch > N`` the permutation is reshuffled as needed.
+    The rest of the batch is drawn (without replacement) from the seed's
+    top-``pool_size`` neighbors in ``neighbor_table``. If a seed's pool is
+    too small, the shortfall is filled by random landmarks so every batch
+    has exactly ``batch_size`` items.
 
     The neighbor table may be swapped in place via :meth:`set_neighbors`
     (used to switch from GPS to DSS and to refresh DSS between epochs)
@@ -224,6 +226,10 @@ class HardNegativeBatchSampler(Sampler):
     pool_size : int | None
         Only sample from the closest ``pool_size`` neighbors per seed.
         Defaults to K. Smaller pool = harder negatives (but less diverse).
+    iters_per_epoch : int | None
+        Number of batches per epoch. Defaults to ``N // batch_size``
+        (same volume as a standard random-sampler baseline). Set higher
+        to visit each landmark as a seed more often (Sample4Geo-style).
     seed : int | None
         RNG seed. If None, a fresh nondeterministic RNG is used.
     """
@@ -233,12 +239,15 @@ class HardNegativeBatchSampler(Sampler):
         neighbor_table: np.ndarray,
         batch_size: int,
         pool_size: int | None = None,
+        iters_per_epoch: int | None = None,
         seed: int | None = None,
     ) -> None:
         self._check_table(neighbor_table)
         self.neighbor_table = neighbor_table
         self.batch_size = batch_size
         self.pool_size = min(pool_size or neighbor_table.shape[1], neighbor_table.shape[1])
+        n = neighbor_table.shape[0]
+        self.iters_per_epoch = int(iters_per_epoch) if iters_per_epoch else max(n // batch_size, 1)
         self.rng = np.random.default_rng(seed)
 
     @staticmethod
@@ -263,8 +272,18 @@ class HardNegativeBatchSampler(Sampler):
         n = self.neighbor_table.shape[0]
         need = self.batch_size - 1
         pool_size = self.pool_size
-        all_indices = np.arange(n)
-        seed_order = self.rng.permutation(n)
+
+        # Build a seed sequence of exactly iters_per_epoch entries
+        if self.iters_per_epoch <= n:
+            seed_order = self.rng.permutation(n)[: self.iters_per_epoch]
+        else:
+            chunks = []
+            remaining = self.iters_per_epoch
+            while remaining > 0:
+                take = min(remaining, n)
+                chunks.append(self.rng.permutation(n)[:take])
+                remaining -= take
+            seed_order = np.concatenate(chunks)
 
         for seed in seed_order:
             pool = self.neighbor_table[seed, :pool_size]
@@ -290,4 +309,4 @@ class HardNegativeBatchSampler(Sampler):
             yield [int(seed)] + chosen
 
     def __len__(self) -> int:
-        return self.neighbor_table.shape[0]
+        return self.iters_per_epoch

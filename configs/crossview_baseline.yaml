@@ -39,6 +39,8 @@ hard_negatives:
   enabled: true
   neighbor_pool: 128          # top-K neighbors stored per landmark (≥ batch_size-1)
   pool_size: 64               # sample negatives from top-pool_size (smaller = harder)
+  iters_per_epoch: null       # null ⇒ N // batch_size (≈ lean baseline volume).
+                              # Raise (e.g. 548) for more gradient steps per epoch.
   gps_epochs: 3               # epochs using GPS neighbors before DSS kicks in
   dss_refresh_every: 1        # rebuild DSS table every N epochs after gps_epochs
   dss_embed_batch: 256        # batch size for landmark embedding pass
