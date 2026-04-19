@@ -31,5 +31,14 @@ evaluation:
   map_k: 1000                 # mAP truncation depth
   directions: ["g2s", "s2g"]  # ground→satellite and satellite→ground
 
+# Sample4Geo-style hard-negative sampling
+hard_negatives:
+  enabled: true
+  neighbor_pool: 20           # top-K neighbors stored per landmark
+  pool_size: 20               # sample negatives from top-pool_size (≤ neighbor_pool)
+  gps_epochs: 3               # epochs using GPS neighbors before DSS kicks in
+  dss_refresh_every: 1        # rebuild DSS table every N epochs after gps_epochs
+  dss_embed_batch: 128        # batch size for landmark embedding pass
+
 device: "cuda"
 save_dir: "checkpoints/crossview"

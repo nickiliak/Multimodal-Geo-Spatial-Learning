@@ -1,10 +1,16 @@
 """Training loop for cross-view retrieval baseline.
 
-Implements the Sample4Geo training pipeline adapted for MMLandmarks:
-1. ConvNeXt backbone with shared weights
-2. Symmetric InfoNCE loss with learnable temperature
-3. GPS-based hard negative sampling (early epochs)
-4. Dynamic Similarity Sampling (later epochs)
+Implements a Sample4Geo-style training pipeline adapted for MMLandmarks:
+
+1. ConvNeXt backbone with shared weights across ground and satellite views.
+2. Symmetric InfoNCE loss with learnable temperature.
+3. Hard-negative batch sampling (when ``hard_negatives.enabled``):
+   a. Early epochs (``gps_epochs``): batches built from GPS-nearest neighbors.
+   b. Later epochs: Dynamic Similarity Sampling — the neighbor table is
+      rebuilt every ``dss_refresh_every`` epochs from the current model's
+      landmark embeddings (mean of ground + satellite view per landmark).
+4. Fallback: if ``hard_negatives.enabled`` is false, uses
+   :class:`UniqueLandmarkSampler` (random unique-landmark batches).
 
 Usage:
     python -m mmgeo.crossview.train --config configs/crossview_baseline.yaml
@@ -34,6 +40,12 @@ from mmgeo.crossview.dataset import (
 from mmgeo.crossview.evaluate import evaluate_crossview
 from mmgeo.crossview.losses import SymmetricInfoNCE
 from mmgeo.crossview.model import CrossViewModel
+from mmgeo.crossview.sampling import (
+    HardNegativeBatchSampler,
+    build_gps_neighbors,
+    build_similarity_neighbors,
+    compute_landmark_embeddings,
+)
 
 
 def train_one_epoch(
@@ -119,13 +131,54 @@ def train(cfg: dict) -> None:
         transform_sat=get_train_transforms(img_size),
     )
 
-    train_sampler = UniqueLandmarkSampler(train_dataset, batch_size=batch_size)
+    # ---- Hard-negative sampler setup (Sample4Geo-style) ----
+    hn_cfg = cfg.get("hard_negatives", {}) or {}
+    hn_enabled = bool(hn_cfg.get("enabled", False))
+    num_workers = cfg["training"].get("num_workers", 4)
+
+    train_sampler: object
+    hn_state: dict = {}
+    if hn_enabled:
+        neighbor_pool = int(hn_cfg.get("neighbor_pool", 20))
+        pool_size = int(hn_cfg.get("pool_size", neighbor_pool))
+        print(f"\n[HardNeg] Precomputing GPS neighbors (k={neighbor_pool})...")
+        coords = train_dataset.get_all_coords()  # (N, 2) degrees
+        gps_neighbors = build_gps_neighbors(coords, k=neighbor_pool)
+        print(f"[HardNeg] GPS neighbor table: {gps_neighbors.shape}")
+
+        train_sampler = HardNegativeBatchSampler(
+            neighbor_table=gps_neighbors,
+            batch_size=batch_size,
+            pool_size=pool_size,
+            seed=cfg.get("seed"),
+        )
+        hn_state = {
+            "gps_neighbors": gps_neighbors,
+            "neighbor_pool": neighbor_pool,
+            "pool_size": pool_size,
+            "gps_epochs": int(hn_cfg.get("gps_epochs", 3)),
+            "dss_refresh_every": int(hn_cfg.get("dss_refresh_every", 1)),
+            "dss_embed_batch": int(hn_cfg.get("dss_embed_batch", 128)),
+        }
+    else:
+        train_sampler = UniqueLandmarkSampler(train_dataset, batch_size=batch_size)
+
     train_loader = DataLoader(
         train_dataset,
         batch_sampler=train_sampler,
-        num_workers=cfg["training"].get("num_workers", 4),
+        num_workers=num_workers,
         pin_memory=True,
     )
+
+    # Separate dataset copy with eval transforms for DSS embedding passes
+    dss_dataset = None
+    if hn_enabled:
+        dss_dataset = MMLCrossViewDataset(
+            data_root=data_root,
+            split="train",
+            transform_ground=get_eval_transforms(img_size),
+            transform_sat=get_eval_transforms(img_size),
+        )
 
     # ---- Model ----
     backbone = cfg["model"].get("backbone", "convnext_tiny.fb_in22k")
@@ -191,6 +244,19 @@ def train(cfg: dict) -> None:
     for epoch in range(1, epochs + 1):
         t0 = time.time()
 
+        # ---- Hard-negative phase switch / DSS refresh ----
+        if hn_enabled:
+            phase = _maybe_refresh_hard_negatives(
+                epoch=epoch,
+                sampler=train_sampler,  # type: ignore[arg-type]
+                hn_state=hn_state,
+                model=model,
+                dss_dataset=dss_dataset,
+                device=device,
+                num_workers=num_workers,
+            )
+            print(f"[HardNeg] Epoch {epoch}: phase={phase}")
+
         train_metrics = train_one_epoch(model, train_loader, loss_fn, optimizer, device, epoch)
         scheduler.step()
 
@@ -235,6 +301,53 @@ def train(cfg: dict) -> None:
         "config": cfg,
     }, save_dir / "last.pt")
     print(f"\nTraining complete. Best R@1: {best_recall:.4f}")
+
+
+def _maybe_refresh_hard_negatives(
+    epoch: int,
+    sampler: HardNegativeBatchSampler,
+    hn_state: dict,
+    model: CrossViewModel,
+    dss_dataset: MMLCrossViewDataset | None,
+    device: torch.device,
+    num_workers: int,
+) -> str:
+    """Switch neighbor source between GPS and DSS as training progresses.
+
+    Phase rules:
+    - ``epoch <= gps_epochs``: GPS neighbors (set once at init, no work here).
+    - ``epoch > gps_epochs`` and ``(epoch - gps_epochs - 1) % dss_refresh_every == 0``:
+      recompute DSS neighbors from current model embeddings and swap into sampler.
+    - Otherwise: reuse previous table.
+
+    Returns
+    -------
+    str
+        ``"gps"`` or ``"dss"`` for logging.
+    """
+    gps_epochs = hn_state["gps_epochs"]
+    if epoch <= gps_epochs:
+        return "gps"
+
+    refresh_every = hn_state["dss_refresh_every"]
+    steps_into_dss = epoch - gps_epochs - 1
+    if steps_into_dss % refresh_every != 0:
+        return "dss"
+
+    assert dss_dataset is not None, "dss_dataset must be provided when hard negatives are enabled"
+    print(f"[HardNeg] Rebuilding DSS neighbor table (epoch {epoch})...")
+    embeds = compute_landmark_embeddings(
+        model,
+        dss_dataset,
+        device,
+        batch_size=hn_state["dss_embed_batch"],
+        num_workers=num_workers,
+        seed=epoch,  # different deterministic pick each refresh
+    )
+    sim_neighbors = build_similarity_neighbors(embeds, k=hn_state["neighbor_pool"])
+    sampler.set_neighbors(sim_neighbors, pool_size=hn_state["pool_size"])
+    print(f"[HardNeg] DSS neighbor table: {sim_neighbors.shape}")
+    return "dss"
 
 
 def _run_eval(
