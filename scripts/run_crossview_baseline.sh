@@ -2,9 +2,9 @@
 #BSUB -J crossview_train
 #BSUB -q gpuv100
 #BSUB -gpu "num=1:mode=exclusive_process"
-#BSUB -n 4
-#BSUB -R "span[hosts=1] rusage[mem=16GB]"
-#BSUB -W 4:00
+#BSUB -n 6
+#BSUB -R "span[hosts=1] rusage[mem=24GB]"
+#BSUB -W 24:00
 #BSUB -o logs/crossview_train_%J.out
 #BSUB -e logs/crossview_train_%J.err
 

@@ -27,7 +27,7 @@ import torch
 import torch.nn as nn
 from torch.optim import AdamW
 from torch.optim.lr_scheduler import CosineAnnealingLR, LinearLR, SequentialLR
-from torch.utils.data import DataLoader
+from torch.utils.data import ConcatDataset, DataLoader
 import yaml
 
 from mmgeo.crossview.dataset import (
@@ -164,11 +164,16 @@ def train(cfg: dict) -> None:
     else:
         train_sampler = UniqueLandmarkSampler(train_dataset, batch_size=batch_size)
 
+    persistent_workers = bool(cfg["training"].get("persistent_workers", True)) and num_workers > 0
+    prefetch_factor = cfg["training"].get("prefetch_factor", 2) if num_workers > 0 else None
+
     train_loader = DataLoader(
         train_dataset,
         batch_sampler=train_sampler,
         num_workers=num_workers,
         pin_memory=True,
+        persistent_workers=persistent_workers,
+        prefetch_factor=prefetch_factor,
     )
 
     # Separate dataset copy with eval transforms for DSS embedding passes
@@ -396,9 +401,30 @@ def _run_eval(
     ks = eval_cfg.get("recall_ks", [1, 5, 10])
     map_k = eval_cfg.get("map_k", 1000)
     directions = eval_cfg.get("directions", ["g2s", "s2g"])
+    include_index = bool(eval_cfg.get("include_index", True))
 
-    def _loader(split: str, modality: str) -> DataLoader:
+    def _single_loader(split: str, modality: str) -> DataLoader:
         ds = MMLImageDataset(data_root, split, modality, transform=eval_transform)
+        return DataLoader(
+            ds, batch_size=eval_batch, shuffle=False,
+            num_workers=num_workers, pin_memory=True,
+        )
+
+    def _gallery_loader(modality: str) -> DataLoader:
+        # Gallery = query-side (labeled positives) + index-side (unlabeled
+        # distractors, landmark_id = -1). The ``index`` split has no
+        # landmark_id column, so those rows never match any query and serve
+        # purely as hard distractors for a benchmark-style retrieval setup.
+        query_ds = MMLImageDataset(data_root, "query", modality, transform=eval_transform)
+        if include_index:
+            index_ds = MMLImageDataset(data_root, "index", modality, transform=eval_transform)
+            ds = ConcatDataset([query_ds, index_ds])
+            print(
+                f"[Eval] gallery {modality}: query={len(query_ds)} + "
+                f"index={len(index_ds)} = {len(ds)}"
+            )
+        else:
+            ds = query_ds
         return DataLoader(
             ds, batch_size=eval_batch, shuffle=False,
             num_workers=num_workers, pin_memory=True,
@@ -407,16 +433,16 @@ def _run_eval(
     results: dict[str, dict[str, float]] = {}
 
     if "g2s" in directions:
-        q_loader = _loader("query", "ground")
-        idx_loader = _loader("index", "satellite")
+        q_loader = _single_loader("query", "ground")
+        idx_loader = _gallery_loader("satellite")
         results["g2s"] = evaluate_crossview(
             model, q_loader, idx_loader, device,
             ks=ks, map_k=map_k, direction="g2s",
         )
 
     if "s2g" in directions:
-        q_loader = _loader("query", "satellite")
-        idx_loader = _loader("index", "ground")
+        q_loader = _single_loader("query", "satellite")
+        idx_loader = _gallery_loader("ground")
         results["s2g"] = evaluate_crossview(
             model, q_loader, idx_loader, device,
             ks=ks, map_k=map_k, direction="s2g",

@@ -12,7 +12,7 @@ model:
 
 training:
   epochs: 20
-  batch_size: 32          # increase to 128 on multi-GPU
+  batch_size: 128         # V100 32GB fits ~256 at 224px for convnext_tiny
   img_size: 224
   lr: 0.0001
   weight_decay: 0.0001
@@ -22,23 +22,26 @@ training:
   warmup_epochs: 2
   warmup_start_factor: 0.1
   min_lr_ratio: 0.01
-  num_workers: 4
-  eval_every: 1          # evaluate every N epochs
-  eval_batch_size: 128    # larger batch for eval (no grads)
+  num_workers: 6          # I/O-bound; keep LSF "-n" ≥ this
+  prefetch_factor: 4      # more batches queued per worker
+  persistent_workers: true
+  eval_every: 1           # evaluate every N epochs
+  eval_batch_size: 256    # larger batch for eval (no grads)
 
 evaluation:
   recall_ks: [1, 5, 10]
   map_k: 1000                 # mAP truncation depth
   directions: ["g2s", "s2g"]  # ground→satellite and satellite→ground
+  include_index: true         # extend gallery with unlabeled index-split distractors
 
 # Sample4Geo-style hard-negative sampling
 hard_negatives:
   enabled: true
-  neighbor_pool: 20           # top-K neighbors stored per landmark
-  pool_size: 20               # sample negatives from top-pool_size (≤ neighbor_pool)
+  neighbor_pool: 128          # top-K neighbors stored per landmark (≥ batch_size-1)
+  pool_size: 64               # sample negatives from top-pool_size (smaller = harder)
   gps_epochs: 3               # epochs using GPS neighbors before DSS kicks in
   dss_refresh_every: 1        # rebuild DSS table every N epochs after gps_epochs
-  dss_embed_batch: 128        # batch size for landmark embedding pass
+  dss_embed_batch: 256        # batch size for landmark embedding pass
 
 device: "cuda"
 save_dir: "checkpoints/crossview"

@@ -199,12 +199,16 @@ class MMLImageDataset(Dataset):
         csv_path = self.data_root / split / f"mml_{split}_{modality}.csv"
         df = pd.read_csv(csv_path)
 
-        # Explode space-separated hex IDs into individual rows
+        # Explode space-separated hex IDs into individual rows.
+        # The ``index`` split CSVs have no ``landmark_id`` column — those rows
+        # act as unlabeled distractors in the gallery, so we tag them with -1
+        # (a sentinel that never matches any real query landmark).
         self.image_ids: list[str] = []
         self.landmark_ids: list[int] = []
+        has_lid = "landmark_id" in df.columns
 
         for _, row in df.iterrows():
-            lid = int(row["landmark_id"])
+            lid = int(row["landmark_id"]) if has_lid else -1
             for hex_id in str(row["images"]).split():
                 self.image_ids.append(hex_id)
                 self.landmark_ids.append(lid)
