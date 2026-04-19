@@ -36,3 +36,9 @@ Thumbs.db
 # Claude
 CLAUDE.md
 
+
+# training artifacts
+checkpoints/
+
+# accidental shell/terminal junk
+*.tmp

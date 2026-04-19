@@ -20,7 +20,7 @@ import numpy as np
 import torch
 import torch.nn as nn
 from torch.optim import AdamW
-from torch.optim.lr_scheduler import CosineAnnealingLR
+from torch.optim.lr_scheduler import CosineAnnealingLR, LinearLR, SequentialLR
 from torch.utils.data import DataLoader
 import yaml
 
@@ -43,10 +43,14 @@ def train_one_epoch(
     optimizer: torch.optim.Optimizer,
     device: torch.device,
     epoch: int,
-) -> float:
-    """Train for one epoch, return average loss."""
+) -> dict[str, float]:
+    """Train for one epoch and return aggregate training metrics."""
     model.train()
     total_loss = 0.0
+    total_diag_sim = 0.0
+    total_offdiag_sim = 0.0
+    total_margin = 0.0
+    total_batch_acc = 0.0
     n_batches = 0
 
     for batch in dataloader:
@@ -59,6 +63,24 @@ def train_one_epoch(
 
         # Loss
         loss = loss_fn(ground_embeds, sat_embeds)
+        
+        # Diagnostic stats: if these stay flat, training is near-uniform.
+        with torch.no_grad():
+            sims = ground_embeds @ sat_embeds.T  # cosine similarities
+            bsz = sims.size(0)
+            diag = sims.diag()
+            if bsz > 1:
+                offdiag_mask = ~torch.eye(bsz, dtype=torch.bool, device=sims.device)
+                offdiag = sims[offdiag_mask]
+                offdiag_mean = offdiag.mean()
+            else:
+                offdiag_mean = torch.zeros((), device=sims.device)
+            batch_acc = (sims.argmax(dim=1) == torch.arange(bsz, device=sims.device)).float().mean()
+
+            total_diag_sim += diag.mean().item()
+            total_offdiag_sim += offdiag_mean.item()
+            total_margin += (diag.mean() - offdiag_mean).item()
+            total_batch_acc += batch_acc.item()
 
         # Backward
         optimizer.zero_grad()
@@ -68,8 +90,14 @@ def train_one_epoch(
         total_loss += loss.item()
         n_batches += 1
 
-    avg_loss = total_loss / max(n_batches, 1)
-    return avg_loss
+    denom = max(n_batches, 1)
+    return {
+        "loss": total_loss / denom,
+        "diag_sim": total_diag_sim / denom,
+        "offdiag_sim": total_offdiag_sim / denom,
+        "sim_margin": total_margin / denom,
+        "batch_acc": total_batch_acc / denom,
+    }
 
 
 def train(cfg: dict) -> None:
@@ -123,7 +151,31 @@ def train(cfg: dict) -> None:
     optimizer = AdamW(params, lr=lr, weight_decay=cfg["training"].get("weight_decay", 1e-4))
 
     epochs = cfg["training"].get("epochs", 20)
-    scheduler = CosineAnnealingLR(optimizer, T_max=epochs, eta_min=lr * 0.01)
+    warmup_epochs = cfg["training"].get("warmup_epochs", 2)
+    warmup_start_factor = cfg["training"].get("warmup_start_factor", 0.1)
+    min_lr_ratio = cfg["training"].get("min_lr_ratio", 0.01)
+
+    if warmup_epochs > 0:
+        cosine_epochs = max(epochs - warmup_epochs, 1)
+        scheduler = SequentialLR(
+            optimizer,
+            schedulers=[
+                LinearLR(
+                    optimizer,
+                    start_factor=warmup_start_factor,
+                    end_factor=1.0,
+                    total_iters=warmup_epochs,
+                ),
+                CosineAnnealingLR(
+                    optimizer,
+                    T_max=cosine_epochs,
+                    eta_min=lr * min_lr_ratio,
+                ),
+            ],
+            milestones=[warmup_epochs],
+        )
+    else:
+        scheduler = CosineAnnealingLR(optimizer, T_max=epochs, eta_min=lr * min_lr_ratio)
 
     # ---- Training loop ----
     save_dir = Path(cfg.get("save_dir", "checkpoints/crossview"))
@@ -139,7 +191,7 @@ def train(cfg: dict) -> None:
     for epoch in range(1, epochs + 1):
         t0 = time.time()
 
-        avg_loss = train_one_epoch(model, train_loader, loss_fn, optimizer, device, epoch)
+        train_metrics = train_one_epoch(model, train_loader, loss_fn, optimizer, device, epoch)
         scheduler.step()
 
         elapsed = time.time() - t0
@@ -148,7 +200,11 @@ def train(cfg: dict) -> None:
 
         print(
             f"Epoch {epoch:3d}/{epochs} | "
-            f"loss={avg_loss:.4f} | "
+            f"loss={train_metrics['loss']:.4f} | "
+            f"diag={train_metrics['diag_sim']:.4f} | "
+            f"offdiag={train_metrics['offdiag_sim']:.4f} | "
+            f"margin={train_metrics['sim_margin']:.4f} | "
+            f"acc={train_metrics['batch_acc']:.3f} | "
             f"temp={temp:.4f} | "
             f"lr={lr_now:.6f} | "
             f"time={elapsed:.1f}s"

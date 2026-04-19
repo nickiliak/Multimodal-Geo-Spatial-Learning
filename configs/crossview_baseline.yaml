@@ -14,13 +14,16 @@ training:
   epochs: 20
   batch_size: 32          # increase to 128 on multi-GPU
   img_size: 224
-  lr: 0.001
+  lr: 0.0001
   weight_decay: 0.0001
   temperature: 0.07       # initial; learnable during training
   learnable_temp: true
-  label_smoothing: 0.1
+  label_smoothing: 0.0
+  warmup_epochs: 2
+  warmup_start_factor: 0.1
+  min_lr_ratio: 0.01
   num_workers: 4
-  eval_every: 999           # evaluate every N epochs
+  eval_every: 1          # evaluate every N epochs
   eval_batch_size: 128    # larger batch for eval (no grads)
 
 evaluation:
