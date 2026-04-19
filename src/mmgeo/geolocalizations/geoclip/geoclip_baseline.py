@@ -147,21 +147,25 @@ def load_query_data(
     ground_df = pd.read_csv(data_root / "query" / "mml_query_ground.csv")
     merged = query_df.merge(ground_df, on="landmark_id")
 
+    true_coordsmerged = merged[["lat", "lon"]].values
     image_paths: list[Path] = []
-    for _, row in merged.iterrows():
-        hex_id = str(row["images"]).split()[0]
-        path = (
-            data_root
-            / "query"
-            / "ground"
-            / hex_id[0]
-            / hex_id[1]
-            / hex_id[2]
-            / f"{hex_id}.jpg"
-        )
-        image_paths.append(path)
+    true_coords = np.zeros((18688,2))
+    for j, row in merged.iterrows():
+        
+        for i in range(len(str(row["images"]).split())):
+            hex_id = str(row["images"]).split()[i]
+            path = (
+                data_root
+                / "query"
+                / "ground"
+                / hex_id[0]
+                / hex_id[1]
+                / hex_id[2]
+                / f"{hex_id}.jpg"
+            )
+            image_paths.append(path)
+            true_coords[len(image_paths)-1,:] = true_coordsmerged[j,:]
 
-    true_coords = merged[["lat", "lon"]].values
     landmark_ids = merged["landmark_id"].values
     return image_paths, true_coords, landmark_ids
 
