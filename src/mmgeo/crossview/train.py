@@ -212,19 +212,21 @@ def train(cfg: dict) -> None:
 
         # ---- Periodic evaluation ----
         if epoch % eval_every == 0 or epoch == epochs:
-            recalls = _run_eval(model, data_root, img_size, device, cfg)
+            eval_results = _run_eval(model, data_root, img_size, device, cfg)
 
-            r1 = recalls.get(1, 0.0)
+            # Use g2s Recall@1 as the checkpoint selection signal
+            g2s = eval_results.get("g2s", {})
+            r1 = g2s.get("recall@1", 0.0)
             if r1 > best_recall:
                 best_recall = r1
                 ckpt_path = save_dir / "best.pt"
                 torch.save({
                     "epoch": epoch,
                     "model_state_dict": model.state_dict(),
-                    "recall@1": r1,
+                    "metrics": eval_results,
                     "config": cfg,
                 }, ckpt_path)
-                print(f"  → New best! R@1={r1:.4f}, saved to {ckpt_path}")
+                print(f"  → New best! g2s R@1={r1:.4f}, saved to {ckpt_path}")
 
     # Save final checkpoint
     torch.save({
@@ -241,33 +243,56 @@ def _run_eval(
     img_size: int,
     device: torch.device,
     cfg: dict,
-) -> dict[int, float]:
-    """Run ground→satellite retrieval evaluation.
-    
-    Queries: ground images from query split (landmark_id known)
-    Index: satellite images from query split (landmark_id known)
-    Match is correct if retrieved image shares landmark_id with query.
+) -> dict[str, dict[str, float]]:
+    """Run benchmark-style cross-view retrieval evaluation.
+
+    Queries come from the ``query`` split; gallery/index comes from the
+    ``index`` split. Runs both directions by default:
+
+    - g2s: query ground → index satellite
+    - s2g: query satellite → index ground
+
+    A retrieved item is relevant if it shares the query's landmark_id.
+
+    Returns
+    -------
+    dict mapping direction ("g2s", "s2g") → metrics dict.
     """
+    eval_cfg = cfg.get("evaluation", {}) or {}
     eval_transform = get_eval_transforms(img_size)
     eval_batch = cfg["training"].get("eval_batch_size", 128)
+    num_workers = cfg["training"].get("num_workers", 4)
 
-    # Both query and index come from the query split
-    # query ground → retrieve from query satellite
-    query_ds = MMLImageDataset(data_root, "query", "ground", transform=eval_transform)
-    query_loader = DataLoader(
-        query_ds, batch_size=eval_batch, shuffle=False,
-        num_workers=4, pin_memory=True,
-    )
+    ks = eval_cfg.get("recall_ks", [1, 5, 10])
+    map_k = eval_cfg.get("map_k", 1000)
+    directions = eval_cfg.get("directions", ["g2s", "s2g"])
 
-    index_ds = MMLImageDataset(data_root, "query", "satellite", transform=eval_transform)
-    index_loader = DataLoader(
-        index_ds, batch_size=eval_batch, shuffle=False,
-        num_workers=4, pin_memory=True,
-    )
+    def _loader(split: str, modality: str) -> DataLoader:
+        ds = MMLImageDataset(data_root, split, modality, transform=eval_transform)
+        return DataLoader(
+            ds, batch_size=eval_batch, shuffle=False,
+            num_workers=num_workers, pin_memory=True,
+        )
 
-    ks = cfg.get("evaluation", {}).get("recall_ks", [1, 5, 10])
-    recalls = evaluate_crossview(model, query_loader, index_loader, device, ks=ks)
-    return recalls
+    results: dict[str, dict[str, float]] = {}
+
+    if "g2s" in directions:
+        q_loader = _loader("query", "ground")
+        idx_loader = _loader("index", "satellite")
+        results["g2s"] = evaluate_crossview(
+            model, q_loader, idx_loader, device,
+            ks=ks, map_k=map_k, direction="g2s",
+        )
+
+    if "s2g" in directions:
+        q_loader = _loader("query", "satellite")
+        idx_loader = _loader("index", "ground")
+        results["s2g"] = evaluate_crossview(
+            model, q_loader, idx_loader, device,
+            ks=ks, map_k=map_k, direction="s2g",
+        )
+
+    return results
 
 
 def main():

@@ -1,7 +1,8 @@
 """Evaluation utilities for cross-view retrieval.
 
-Metrics follow ILIAS/Sample4Geo conventions:
+Metrics follow ILIAS / MMLandmarks / Sample4Geo conventions:
 - Recall@K: fraction of queries with a correct match in top-K results
+- mAP@K: mean Average Precision restricted to the top-K retrieved items
 - A match is correct if the retrieved image has the same landmark_id as the query
 
 Two evaluation directions:
@@ -21,6 +22,7 @@ from tqdm import tqdm
 
 
 DEFAULT_RECALL_KS = [1, 5, 10]
+DEFAULT_MAP_K = 1000
 
 
 @torch.no_grad()
@@ -62,6 +64,105 @@ def extract_embeddings(
     return embeddings, landmark_ids
 
 
+def compute_retrieval_metrics(
+    query_embeds: torch.Tensor,
+    query_lids: np.ndarray,
+    index_embeds: torch.Tensor,
+    index_lids: np.ndarray,
+    recall_ks: list[int] | None = None,
+    map_k: int = DEFAULT_MAP_K,
+    batch_size: int = 256,
+) -> dict[str, float]:
+    """Compute Recall@K and mAP@K for retrieval.
+
+    For each query, ranks all index images by cosine similarity (descending).
+    A retrieved item is relevant if it shares the query's landmark_id.
+
+    Recall@K: 1 if any relevant item appears in top-K, else 0 (averaged over queries).
+    mAP@K: Average Precision restricted to top-K per query, using the standard
+        AP@K = (1 / min(R, K)) * Σ_{i=1..K} P(i) * rel(i)
+        where R is the total number of relevant items for the query and P(i) is
+        precision at rank i. Queries with R = 0 are skipped.
+
+    Parameters
+    ----------
+    query_embeds : torch.Tensor, shape (Q, D)
+    query_lids : np.ndarray, shape (Q,)
+    index_embeds : torch.Tensor, shape (I, D)
+    index_lids : np.ndarray, shape (I,)
+    recall_ks : list of int
+    map_k : int
+        Truncation depth for mAP. Clamped to the index size.
+    batch_size : int
+        Process queries in batches to bound memory use.
+
+    Returns
+    -------
+    dict with keys:
+        "recall@k" for each k in recall_ks (float, 0..1)
+        f"map@{map_k}" (float, 0..1)
+    """
+    if recall_ks is None:
+        recall_ks = DEFAULT_RECALL_KS
+
+    n_queries = len(query_embeds)
+    n_index = len(index_embeds)
+    effective_map_k = min(map_k, n_index)
+    top_k_needed = max(max(recall_ks), effective_map_k)
+
+    # Precompute per-landmark relevant counts (for AP denominator)
+    # relevant_counts[query_lid] = total index items with that landmark_id
+    unique_idx_lids, idx_counts = np.unique(index_lids, return_counts=True)
+    lid_to_count = dict(zip(unique_idx_lids.tolist(), idx_counts.tolist()))
+
+    recall_hits = {k: 0 for k in recall_ks}
+    ap_sum = 0.0
+    ap_count = 0  # queries with at least one relevant item
+
+    for start in range(0, n_queries, batch_size):
+        end = min(start + batch_size, n_queries)
+        q_batch = query_embeds[start:end]  # (B, D)
+        q_lids = query_lids[start:end]     # (B,)
+
+        # Cosine similarity (embeddings are L2-normalized)
+        sims = q_batch @ index_embeds.T  # (B, I)
+
+        topk_indices = sims.topk(top_k_needed, dim=1).indices.cpu().numpy()  # (B, top_k_needed)
+
+        for i in range(len(q_batch)):
+            q_lid = int(q_lids[i])
+            retrieved_lids = index_lids[topk_indices[i]]  # (top_k_needed,)
+            relevance = (retrieved_lids == q_lid)
+
+            # Recall@K
+            for k in recall_ks:
+                if relevance[:k].any():
+                    recall_hits[k] += 1
+
+            # mAP@K
+            total_relevant = lid_to_count.get(q_lid, 0)
+            if total_relevant == 0:
+                continue
+
+            rel_top = relevance[:effective_map_k].astype(np.float64)
+            if rel_top.sum() == 0:
+                ap_count += 1  # contributes 0 AP to the average
+                continue
+
+            ranks = np.arange(1, effective_map_k + 1, dtype=np.float64)
+            cum_hits = np.cumsum(rel_top)
+            precision_at_ranks = cum_hits / ranks  # P(i) for i=1..K
+            ap = (precision_at_ranks * rel_top).sum() / min(total_relevant, effective_map_k)
+            ap_sum += ap
+            ap_count += 1
+
+    metrics: dict[str, float] = {
+        f"recall@{k}": recall_hits[k] / max(n_queries, 1) for k in recall_ks
+    }
+    metrics[f"map@{effective_map_k}"] = (ap_sum / ap_count) if ap_count > 0 else 0.0
+    return metrics
+
+
 def compute_recall_at_k(
     query_embeds: torch.Tensor,
     query_lids: np.ndarray,
@@ -70,54 +171,14 @@ def compute_recall_at_k(
     ks: list[int] | None = None,
     batch_size: int = 256,
 ) -> dict[int, float]:
-    """Compute Recall@K for retrieval.
-
-    For each query, finds the top-K nearest index images by cosine similarity
-    and checks if any share the same landmark_id.
-
-    Parameters
-    ----------
-    query_embeds : torch.Tensor, shape (Q, D)
-    query_lids : np.ndarray, shape (Q,)
-    index_embeds : torch.Tensor, shape (I, D)
-    index_lids : np.ndarray, shape (I,)
-    ks : list of int
-        Recall thresholds.
-    batch_size : int
-        Process queries in batches to avoid OOM on large index sets.
-
-    Returns
-    -------
-    dict mapping k -> recall (0.0 to 1.0)
-    """
+    """Backward-compatible Recall@K wrapper around compute_retrieval_metrics."""
     if ks is None:
         ks = DEFAULT_RECALL_KS
-    max_k = max(ks)
-
-    n_queries = len(query_embeds)
-    correct = {k: 0 for k in ks}
-
-    # Process in batches to handle large similarity matrices
-    for start in range(0, n_queries, batch_size):
-        end = min(start + batch_size, n_queries)
-        q_batch = query_embeds[start:end]  # (B, D)
-        q_lids = query_lids[start:end]     # (B,)
-
-        # Cosine similarity (embeddings are already L2-normalized)
-        sims = q_batch @ index_embeds.T  # (B, I)
-
-        # Top-K indices
-        topk_indices = sims.topk(max_k, dim=1).indices.numpy()  # (B, max_k)
-
-        for i in range(len(q_batch)):
-            query_lid = q_lids[i]
-            retrieved_lids = index_lids[topk_indices[i]]
-
-            for k in ks:
-                if query_lid in retrieved_lids[:k]:
-                    correct[k] += 1
-
-    return {k: correct[k] / n_queries for k in ks}
+    metrics = compute_retrieval_metrics(
+        query_embeds, query_lids, index_embeds, index_lids,
+        recall_ks=ks, map_k=0, batch_size=batch_size,
+    )
+    return {k: metrics[f"recall@{k}"] for k in ks}
 
 
 def evaluate_crossview(
@@ -126,8 +187,9 @@ def evaluate_crossview(
     index_loader: DataLoader,
     device: torch.device,
     ks: list[int] | None = None,
+    map_k: int = DEFAULT_MAP_K,
     direction: str = "g2s",
-) -> dict[int, float]:
+) -> dict[str, float]:
     """Full cross-view retrieval evaluation pipeline.
 
     Parameters
@@ -140,12 +202,15 @@ def evaluate_crossview(
         Index/gallery images (satellite for g2s, ground for s2g).
     device : torch.device
     ks : list of int
+        Recall thresholds.
+    map_k : int
+        Truncation depth for mAP (default 1000).
     direction : str
         ``"g2s"`` (ground→satellite) or ``"s2g"`` (satellite→ground).
 
     Returns
     -------
-    dict mapping k -> recall value
+    dict with keys ``"recall@k"`` for each k, and ``"map@<map_k>"``.
     """
     print(f"\n{'='*60}")
     print(f"Evaluating {direction.upper()} retrieval")
@@ -159,10 +224,13 @@ def evaluate_crossview(
     idx_embeds, idx_lids = extract_embeddings(model, index_loader, device)
     print(f"  → {len(idx_embeds)} index embeddings, {len(np.unique(idx_lids))} unique landmarks")
 
-    print("Computing recall...")
-    recalls = compute_recall_at_k(q_embeds, q_lids, idx_embeds, idx_lids, ks=ks)
+    print("Computing metrics...")
+    metrics = compute_retrieval_metrics(
+        q_embeds, q_lids, idx_embeds, idx_lids,
+        recall_ks=ks, map_k=map_k,
+    )
 
-    for k, v in recalls.items():
-        print(f"  Recall@{k}: {v:.4f} ({v*100:.2f}%)")
+    for name, v in metrics.items():
+        print(f"  {name}: {v:.4f} ({v*100:.2f}%)")
 
-    return recalls
+    return metrics

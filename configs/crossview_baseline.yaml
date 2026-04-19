@@ -28,6 +28,8 @@ training:
 
 evaluation:
   recall_ks: [1, 5, 10]
+  map_k: 1000                 # mAP truncation depth
+  directions: ["g2s", "s2g"]  # ground→satellite and satellite→ground
 
 device: "cuda"
 save_dir: "checkpoints/crossview"

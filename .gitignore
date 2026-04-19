@@ -42,3 +42,4 @@ checkpoints/
 
 # accidental shell/terminal junk
 *.tmp
+.claude/settings.local.json
