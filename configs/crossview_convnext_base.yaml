@@ -1,0 +1,53 @@
+# Cross-view retrieval — ConvNeXt-Base (Sample4Geo default backbone)
+# Task 5: stronger backbone + longer schedule + higher resolution.
+# Requires V100 32GB (use -R "select[gpu32gb]" in LSF script).
+
+data:
+  root: "data/MML_Data"
+
+model:
+  backbone: "convnext_base.fb_in22k"   # 88M params
+  embed_dim: 0                          # native 1024
+
+training:
+  epochs: 35
+  batch_size: 64          # fits convnext_base @ 256px on 32GB V100
+  img_size: 256           # bumped from 224
+  lr: 0.0001
+  weight_decay: 0.0001
+  temperature: 0.07
+  learnable_temp: true
+  label_smoothing: 0.0
+  warmup_epochs: 3
+  warmup_start_factor: 0.1
+  min_lr_ratio: 0.01
+  num_workers: 6
+  prefetch_factor: 4
+  persistent_workers: true
+  eval_every: 1
+  eval_batch_size: 128    # larger features → smaller eval batch
+
+evaluation:
+  recall_ks: [1, 5, 10]
+  map_k: 1000
+  directions: ["g2s", "s2g"]
+  include_index: true
+
+# Sample4Geo-style hard-negative sampling
+hard_negatives:
+  enabled: true
+  neighbor_pool: 64
+  pool_size: 32
+  iters_per_epoch: null   # null ⇒ N // batch_size
+  gps_epochs: 4           # slightly longer GPS warmup with larger model
+  dss_refresh_every: 1
+  dss_embed_batch: 128
+
+device: "cuda"
+save_dir: "checkpoints/crossview"
+
+logging:
+  runs_root: "checkpoints/crossview"
+  run_prefix: "cv_v2_base_"
+  run_tag: null
+  selection_metric: "g2s_recall@1"

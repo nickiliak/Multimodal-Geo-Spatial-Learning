@@ -2,6 +2,8 @@
 #BSUB -J crossview_train
 #BSUB -q gpuv100
 #BSUB -gpu "num=1:mode=exclusive_process"
+# Uncomment to require a 32GB V100 (enables batch_size=128+):
+# #BSUB -R "select[gpu32gb]"
 #BSUB -n 6
 #BSUB -R "span[hosts=1] rusage[mem=24GB]"
 #BSUB -W 24:00
