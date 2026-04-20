@@ -1,13 +1,13 @@
 #!/bin/sh
 ### LSF Queue Options
 #BSUB -q gpuv100
-#BSUB -J geoclip_baseline
+#BSUB -J geoclip_train
 #BSUB -n 4
 #BSUB -R "span[hosts=1]"
 #BSUB -R "rusage[mem=4GB]"
 #BSUB -M 5GB
 #BSUB -gpu "num=1:mode=exclusive_process"
-#BSUB -W 0:30
+#BSUB -W 4:00
 #BSUB -o Output_%J.out
 #BSUB -e Output_%J.err
 
@@ -37,12 +37,7 @@ assert torch.cuda.is_available(), 'CUDA unavailable'
     exit 1
 }
 
-echo ">>> Running GeoClip baseline notebook..."
-uv run --no-sync jupyter nbconvert \
-    --to notebook \
-    --execute \
-    --inplace \
-    --ExecutePreprocessor.timeout=3600 \
-    notebooks/team/03_geoclip_baseline.ipynb
+echo ">>> Running GeoClip training..."
+uv run --no-sync python scripts/geoclip_train.py
 
 echo "Done."
