@@ -21,7 +21,9 @@ print(f"Data root: {DATA_ROOT.resolve()}")
 NUM_EPOCHS = 2
 TRAIN_BATCH_SIZE = 32
 LR = 1e-4
-CHECKPOINT_PATH = "best_geoclip_baseline.pth"
+CHECKPOINT_DIR = Path("models")
+CHECKPOINT_DIR.mkdir(exist_ok=True)
+CHECKPOINT_PATH = CHECKPOINT_DIR / "best_geoclip_baseline.pth"
 
 from mmgeo.geolocalizations.geoclip.geoclip_baseline import (
     GeoClipBaseline,
