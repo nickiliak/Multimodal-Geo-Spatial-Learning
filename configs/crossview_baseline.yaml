@@ -12,7 +12,7 @@ model:
 
 training:
   epochs: 20
-  batch_size: 64          # safe on V100 16GB for convnext_tiny @ 224px (128 OOMs)
+  batch_size: 64         # V100 32GB fits ~256 at 224px for convnext_tiny
   img_size: 224
   lr: 0.0001
   weight_decay: 0.0001
@@ -37,7 +37,7 @@ evaluation:
 # Sample4Geo-style hard-negative sampling
 hard_negatives:
   enabled: true
-  neighbor_pool: 64           # top-K neighbors stored per landmark (≥ batch_size-1)
+  neighbor_pool: 64          # top-K neighbors stored per landmark (≥ batch_size-1)
   pool_size: 32               # sample negatives from top-pool_size (smaller = harder)
   iters_per_epoch: null       # null ⇒ N // batch_size (≈ lean baseline volume).
                               # Raise (e.g. 548) for more gradient steps per epoch.
