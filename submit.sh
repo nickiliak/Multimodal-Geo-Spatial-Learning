@@ -22,8 +22,5 @@
 #here load the modules, and activate the environment if needed
 
 module load python3
-module load cuda/12.6
-module load cudnn/v9.13.0.50-prod-cuda-12.X
-module load nccl/2.21.5-1-cuda-12.5
 source .venv/bin/activate
-torchrun --standalone --nproc_per_node=1 notebooks/team/03_geoclip_baseline.py
+torchrun --standalone --nproc_per_node=1 notebooks/team/training.py

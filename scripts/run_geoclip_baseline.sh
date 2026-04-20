@@ -8,8 +8,6 @@
 #BSUB -M 5GB
 #BSUB -gpu "num=1:mode=exclusive_process"
 #BSUB -W 0:30
-#BSUB -B
-#BSUB -N
 #BSUB -o Output_%J.out
 #BSUB -e Output_%J.err
 
@@ -20,7 +18,7 @@ echo "Job ID: $LSB_JOBID | Node: $(hostname) | Date: $(date)"
 echo "--------------------------------------------------"
 
 export PATH="$HOME/.local/bin:$PATH"
-cd ~/Multimodal-Geo-Spatial-Learning || { echo "Project directory not found"; exit 1; }
+cd ~/edvin/Multimodal-Geo-Spatial-Learning || { echo "Project directory not found"; exit 1; }
 
 nvidia-smi
 
