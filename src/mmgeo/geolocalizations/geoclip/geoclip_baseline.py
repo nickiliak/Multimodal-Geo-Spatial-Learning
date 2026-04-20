@@ -149,9 +149,10 @@ def load_query_data(
 
     true_coordsmerged = merged[["lat", "lon"]].values
     image_paths: list[Path] = []
-    true_coords = np.zeros((18688,2))
+    n_images = sum(len(str(r).split()) for r in merged["images"])
+    true_coords = np.zeros((n_images, 2))
     for j, row in merged.iterrows():
-        
+
         for i in range(len(str(row["images"]).split())):
             hex_id = str(row["images"]).split()[i]
             path = (
@@ -192,9 +193,10 @@ def load_train_data(
 
     true_coordsmerged = merged[["lat", "lon"]].values
     image_paths: list[Path] = []
-    true_coords = np.zeros((18688,2))
+    n_images = sum(len(str(r).split()) for r in merged["images"])
+    true_coords = np.zeros((n_images, 2))
     for j, row in merged.iterrows():
-        
+
         for i in range(len(str(row["images"]).split())):
             hex_id = str(row["images"]).split()[i]
             path = (
