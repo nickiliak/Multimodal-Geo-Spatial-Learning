@@ -18,6 +18,7 @@ echo "Job ID: $LSB_JOBID | Node: $(hostname) | Date: $(date)"
 echo "--------------------------------------------------"
 
 export PATH="$HOME/.local/bin:$PATH"
+export PYTHONUNBUFFERED=1
 cd ~/Multimodal-Geo-Spatial-Learning || { echo "Project directory not found"; exit 1; }
 
 nvidia-smi
