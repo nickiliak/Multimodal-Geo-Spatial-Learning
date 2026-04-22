@@ -27,7 +27,7 @@ uv.lock
 
 # Project-specific
 data/
-outputs/
+outputs/jobs
 models/*
 !models/.gitkeep
 
