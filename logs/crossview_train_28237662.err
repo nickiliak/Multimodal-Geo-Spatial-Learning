@@ -1,0 +1,40 @@
+Traceback (most recent call last):
+  File "/zhome/b0/c/220061/Multimodal-Geo-Spatial-Learning/.venv/lib/python3.11/site-packages/pandas/core/indexes/base.py", line 3641, in get_loc
+    return self._engine.get_loc(casted_key)
+           ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+  File "pandas/_libs/index.pyx", line 168, in pandas._libs.index.IndexEngine.get_loc
+  File "pandas/_libs/index.pyx", line 197, in pandas._libs.index.IndexEngine.get_loc
+  File "pandas/_libs/hashtable_class_helper.pxi", line 7668, in pandas._libs.hashtable.PyObjectHashTable.get_item
+  File "pandas/_libs/hashtable_class_helper.pxi", line 7676, in pandas._libs.hashtable.PyObjectHashTable.get_item
+KeyError: 'landmark_id'
+
+The above exception was the direct cause of the following exception:
+
+Traceback (most recent call last):
+  File "<frozen runpy>", line 198, in _run_module_as_main
+  File "<frozen runpy>", line 88, in _run_code
+  File "/zhome/b0/c/220061/Multimodal-Geo-Spatial-Learning/src/mmgeo/crossview/train.py", line 440, in <module>
+    main()
+  File "/zhome/b0/c/220061/Multimodal-Geo-Spatial-Learning/src/mmgeo/crossview/train.py", line 436, in main
+    train(cfg)
+  File "/zhome/b0/c/220061/Multimodal-Geo-Spatial-Learning/src/mmgeo/crossview/train.py", line 296, in train
+    eval_results = _run_eval(model, data_root, img_size, device, cfg)
+                   ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+  File "/zhome/b0/c/220061/Multimodal-Geo-Spatial-Learning/src/mmgeo/crossview/train.py", line 411, in _run_eval
+    idx_loader = _loader("index", "satellite")
+                 ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+  File "/zhome/b0/c/220061/Multimodal-Geo-Spatial-Learning/src/mmgeo/crossview/train.py", line 401, in _loader
+    ds = MMLImageDataset(data_root, split, modality, transform=eval_transform)
+         ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+  File "/zhome/b0/c/220061/Multimodal-Geo-Spatial-Learning/src/mmgeo/crossview/dataset.py", line 207, in __init__
+    lid = int(row["landmark_id"])
+              ~~~^^^^^^^^^^^^^^^
+  File "/zhome/b0/c/220061/Multimodal-Geo-Spatial-Learning/.venv/lib/python3.11/site-packages/pandas/core/series.py", line 959, in __getitem__
+    return self._get_value(key)
+           ^^^^^^^^^^^^^^^^^^^^
+  File "/zhome/b0/c/220061/Multimodal-Geo-Spatial-Learning/.venv/lib/python3.11/site-packages/pandas/core/series.py", line 1046, in _get_value
+    loc = self.index.get_loc(label)
+          ^^^^^^^^^^^^^^^^^^^^^^^^^
+  File "/zhome/b0/c/220061/Multimodal-Geo-Spatial-Learning/.venv/lib/python3.11/site-packages/pandas/core/indexes/base.py", line 3648, in get_loc
+    raise KeyError(key) from err
+KeyError: 'landmark_id'

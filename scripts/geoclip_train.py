@@ -105,13 +105,21 @@ def main() -> None:
     )
     trainer.fit(lit, train_dataloaders=train_loader)
 
-    if checkpoint_path.exists():
-        baseline.model.load_state_dict(torch.load(checkpoint_path, map_location=device))
+    last_path = checkpoint_path.with_name(
+        "last_" + checkpoint_path.name.removeprefix("best_")
+    )
+    load_path = (
+        checkpoint_path if checkpoint_path.exists()
+        else (last_path if last_path.exists() else None)
+    )
+    if load_path is not None:
+        baseline.model.load_state_dict(torch.load(load_path, map_location=device))
         baseline.build_gallery(gallery_coords)
         final = lit.evaluate_on_query()
-        print_metrics("final (best checkpoint)", final)
+        tag = "best" if load_path == checkpoint_path else "last"
+        print_metrics(f"final ({tag} checkpoint)", final)
     else:
-        print("\nNo checkpoint beat zero-shot; skipping final load.")
+        print("\nNo checkpoint on disk; skipping final load.")
 
 
 if __name__ == "__main__":
