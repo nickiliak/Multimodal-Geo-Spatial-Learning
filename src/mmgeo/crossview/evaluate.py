@@ -163,6 +163,58 @@ def compute_retrieval_metrics(
     return metrics
 
 
+def pool_embeddings_by_landmark(
+    embeddings: torch.Tensor,
+    landmark_ids: np.ndarray,
+) -> tuple[torch.Tensor, np.ndarray]:
+    """Mean-pool per-image embeddings into one L2-normalized embedding per landmark.
+
+    Images with landmark_id == -1 (unlabeled index distractors) are kept as-is
+    since they have no group to merge into.
+
+    Parameters
+    ----------
+    embeddings : torch.Tensor, shape (N, D)
+        L2-normalized per-image embeddings.
+    landmark_ids : np.ndarray, shape (N,)
+        Landmark ID for each image. -1 = unlabeled distractor.
+
+    Returns
+    -------
+    pooled_embeds : torch.Tensor, shape (M, D)
+        One L2-normalized embedding per unique landmark (labeled) + one per
+        unlabeled image, M ≤ N.
+    pooled_lids : np.ndarray, shape (M,)
+        Corresponding landmark IDs.
+    """
+    labeled_mask = landmark_ids != -1
+    if not labeled_mask.any():
+        # Nothing to pool (all distractors or all unlabeled)
+        return embeddings, landmark_ids
+
+    labeled_lids = landmark_ids[labeled_mask]
+    labeled_embeds = embeddings[labeled_mask]
+
+    unique_lids = np.unique(labeled_lids)
+    pooled_list = []
+    for lid in unique_lids:
+        mask = labeled_lids == lid
+        mean_e = labeled_embeds[mask].mean(dim=0)
+        pooled_list.append(F.normalize(mean_e, dim=0))
+
+    pooled_embeds = torch.stack(pooled_list, dim=0)  # (M, D)
+    pooled_lids = unique_lids
+
+    # Append any unlabeled rows unchanged (should not appear on query side
+    # but kept for completeness)
+    unlabeled_mask = ~labeled_mask
+    if unlabeled_mask.any():
+        pooled_embeds = torch.cat([pooled_embeds, embeddings[unlabeled_mask]], dim=0)
+        pooled_lids = np.concatenate([pooled_lids, landmark_ids[unlabeled_mask]])
+
+    return pooled_embeds, pooled_lids
+
+
 def compute_recall_at_k(
     query_embeds: torch.Tensor,
     query_lids: np.ndarray,
@@ -189,6 +241,7 @@ def evaluate_crossview(
     ks: list[int] | None = None,
     map_k: int = DEFAULT_MAP_K,
     direction: str = "g2s",
+    pool_queries: bool = True,
 ) -> dict[str, float]:
     """Full cross-view retrieval evaluation pipeline.
 
@@ -207,6 +260,12 @@ def evaluate_crossview(
         Truncation depth for mAP (default 1000).
     direction : str
         ``"g2s"`` (ground→satellite) or ``"s2g"`` (satellite→ground).
+    pool_queries : bool
+        If True (default), mean-pool all per-image embeddings that share the
+        same landmark_id into a single L2-normalized query embedding before
+        retrieval. This follows the MMLandmarks benchmark protocol (all ground
+        images per landmark are averaged). Has no effect when each landmark
+        already has exactly one query image (e.g. s2g satellite queries).
 
     Returns
     -------
@@ -218,7 +277,13 @@ def evaluate_crossview(
 
     print("Embedding queries...")
     q_embeds, q_lids = extract_embeddings(model, query_loader, device)
-    print(f"  → {len(q_embeds)} query embeddings, {len(np.unique(q_lids))} unique landmarks")
+    n_raw = len(q_embeds)
+    n_unique = len(np.unique(q_lids[q_lids != -1]))
+    print(f"  → {n_raw} query embeddings, {n_unique} unique landmarks")
+
+    if pool_queries and n_raw > n_unique:
+        q_embeds, q_lids = pool_embeddings_by_landmark(q_embeds, q_lids)
+        print(f"  → pooled to {len(q_embeds)} landmark embeddings (mean of {n_raw/max(n_unique,1):.1f} imgs/landmark)")
 
     print("Embedding index...")
     idx_embeds, idx_lids = extract_embeddings(model, index_loader, device)
