@@ -1,0 +1,21 @@
+# Sample4Geo training configuration
+
+data:
+  root: "data/MML_Data"
+
+training:
+  epochs: 40
+  batch_size: 128
+  lr: 0.001
+  gps_epochs: 10
+  dss_refresh_every: 4
+
+model:
+  backbone: "convnext_base"
+  pretrained: true
+
+loss:
+  label_smoothing: 0.1
+
+evaluation:
+  thresholds_km: [1, 25, 200, 750, 2500]
