@@ -28,6 +28,8 @@ uv.lock
 # Project-specific
 data/
 outputs/
+models/*
+!models/.gitkeep
 
 # OS
 .DS_Store
