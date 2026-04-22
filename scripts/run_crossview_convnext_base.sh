@@ -17,6 +17,16 @@ echo "Job started at $(date)"
 echo "Running on $(hostname)"
 nvidia-smi
 
-uv run python -m mmgeo.crossview.train --config configs/crossview_convnext_base.yaml
+# Set to a checkpoint path to resume (e.g. best.pt from a previous run), or leave empty.
+RESUME="checkpoints/crossview/cv_v2_base_20260420_120027/best.pt"
+
+if [ -n "$RESUME" ] && [ -f "$RESUME" ]; then
+    echo "Resuming from checkpoint: $RESUME"
+    uv run python -m mmgeo.crossview.train \
+        --config configs/crossview_convnext_base.yaml \
+        --resume "$RESUME"
+else
+    uv run python -m mmgeo.crossview.train --config configs/crossview_convnext_base.yaml
+fi
 
 echo "Job finished at $(date)"

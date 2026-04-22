@@ -113,8 +113,18 @@ def train_one_epoch(
     }
 
 
-def train(cfg: dict) -> None:
-    """Main training function."""
+def train(cfg: dict, resume: str | None = None) -> None:
+    """Main training function.
+
+    Parameters
+    ----------
+    cfg : dict
+        Parsed YAML config.
+    resume : str | None
+        Optional path to a ``best.pt`` / ``last.pt`` checkpoint to resume from.
+        Model weights are restored and the LR scheduler is fast-forwarded so
+        the cosine decay continues from the correct position.
+    """
 
     # ---- Device ----
     device = torch.device(cfg.get("device", "cuda" if torch.cuda.is_available() else "cpu"))
@@ -239,6 +249,19 @@ def train(cfg: dict) -> None:
     else:
         scheduler = CosineAnnealingLR(optimizer, T_max=epochs, eta_min=lr * min_lr_ratio)
 
+    # ---- Resume: load checkpoint weights + fast-forward scheduler ----
+    start_epoch = 1
+    if resume:
+        ckpt = torch.load(resume, map_location=device)
+        model.load_state_dict(ckpt["model_state_dict"])
+        start_epoch = int(ckpt["epoch"]) + 1
+        print(f"[Resume] Loaded checkpoint from epoch {ckpt['epoch']} ({resume})")
+        print(f"[Resume] Resuming training from epoch {start_epoch}")
+        # Fast-forward scheduler so cosine decay continues from the right position
+        for _ in range(ckpt["epoch"]):
+            scheduler.step()
+        print(f"[Resume] LR after fast-forward: {optimizer.param_groups[0]['lr']:.6f}")
+
     # ---- Run directory + logger ----
     logging_cfg = cfg.get("logging", {}) or {}
     runs_root = Path(logging_cfg.get("runs_root", cfg.get("save_dir", "checkpoints/crossview")))
@@ -256,9 +279,11 @@ def train(cfg: dict) -> None:
 
     print(f"\nStarting training: {epochs} epochs, batch_size={batch_size}")
     print(f"Backbone: {backbone}, LR: {lr}")
+    if resume:
+        print(f"Resuming from epoch {start_epoch} / {epochs}")
     print(f"{'='*60}\n")
 
-    for epoch in range(1, epochs + 1):
+    for epoch in range(start_epoch, epochs + 1):
         t0 = time.time()
 
         # ---- Hard-negative phase switch / DSS refresh ----
@@ -317,12 +342,13 @@ def train(cfg: dict) -> None:
                 }, ckpt_path)
                 print(f"  → New best! {logger.selection_metric}={logger.best['score']:.4f}, saved to {ckpt_path}")
 
-    # Save final checkpoint + finalize run outputs
-    torch.save({
-        "epoch": epochs,
-        "model_state_dict": model.state_dict(),
-        "config": cfg,
-    }, save_dir / "last.pt")
+        # Always overwrite last.pt so a wall-time kill leaves a usable resume point
+        torch.save({
+            "epoch": epoch,
+            "model_state_dict": model.state_dict(),
+            "config": cfg,
+        }, save_dir / "last.pt")
+
     logger.finalize()
     best_score = logger.best["score"] if logger.best["epoch"] is not None else float("nan")
     print(f"\nTraining complete. Best {logger.selection_metric}: {best_score:.4f}")
@@ -457,12 +483,18 @@ def _run_eval(
 def main():
     parser = argparse.ArgumentParser(description="Train cross-view retrieval baseline")
     parser.add_argument("--config", type=str, default="configs/crossview_baseline.yaml")
+    parser.add_argument(
+        "--resume", type=str, default=None,
+        help="Path to a checkpoint (best.pt or last.pt) to resume training from. "
+             "The model weights and epoch number are restored; the LR scheduler is "
+             "fast-forwarded to match.",
+    )
     args = parser.parse_args()
 
     with open(args.config) as f:
         cfg = yaml.safe_load(f)
 
-    train(cfg)
+    train(cfg, resume=args.resume)
 
 
 if __name__ == "__main__":
