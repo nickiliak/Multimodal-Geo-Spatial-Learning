@@ -1,0 +1,56 @@
+# Cross-view retrieval baseline (Sample4Geo-inspired)
+# Ground → Satellite retrieval on MMLandmarks
+
+data:
+  root: "data/MML_Data"
+
+model:
+  # Start small for fast iteration; upgrade to convnext_base.fb_in22k later
+  backbone: "convnext_tiny.fb_in22k"   # 28M params
+  # backbone: "convnext_base.fb_in22k"  # 88M params (Sample4Geo default)
+  embed_dim: 0  # 0 = use backbone's native dim (768 for tiny, 1024 for base)
+
+training:
+  epochs: 20
+  batch_size: 64         # V100 32GB fits ~256 at 224px for convnext_tiny
+  img_size: 224
+  lr: 0.0001
+  weight_decay: 0.0001
+  temperature: 0.07       # initial; learnable during training
+  learnable_temp: true
+  label_smoothing: 0.0
+  warmup_epochs: 2
+  warmup_start_factor: 0.1
+  min_lr_ratio: 0.01
+  num_workers: 6          # I/O-bound; keep LSF "-n" ≥ this
+  prefetch_factor: 4      # more batches queued per worker
+  persistent_workers: true
+  eval_every: 1           # evaluate every N epochs
+  eval_batch_size: 256    # larger batch for eval (no grads)
+
+evaluation:
+  recall_ks: [1, 5, 10]
+  map_k: 1000                 # mAP truncation depth
+  directions: ["g2s", "s2g"]  # ground→satellite and satellite→ground
+  include_index: true         # extend gallery with unlabeled index-split distractors
+
+# Sample4Geo-style hard-negative sampling
+hard_negatives:
+  enabled: true
+  neighbor_pool: 64          # top-K neighbors stored per landmark (≥ batch_size-1)
+  pool_size: 32               # sample negatives from top-pool_size (smaller = harder)
+  iters_per_epoch: null       # null ⇒ N // batch_size (≈ lean baseline volume).
+                              # Raise (e.g. 548) for more gradient steps per epoch.
+  gps_epochs: 3               # epochs using GPS neighbors before DSS kicks in
+  dss_refresh_every: 1        # rebuild DSS table every N epochs after gps_epochs
+  dss_embed_batch: 256        # batch size for landmark embedding pass
+
+device: "cuda"
+save_dir: "checkpoints/crossview"
+
+# Versioned experiment outputs (config copy, metrics CSV/JSON, summary.md, checkpoints)
+logging:
+  runs_root: "checkpoints/crossview"   # parent dir for timestamped run folders
+  run_prefix: "cv_v2_"                  # prepended to run dir name (model-family tag)
+  run_tag: null                         # optional suffix, e.g. "convnext_tiny_hn"
+  selection_metric: "g2s_recall@1"      # flat eval key used to pick best epoch
