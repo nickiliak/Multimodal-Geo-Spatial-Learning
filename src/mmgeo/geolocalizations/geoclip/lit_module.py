@@ -61,14 +61,16 @@ class GeoClipLitModule(L.LightningModule):
         imgs = imgs.to(self.device)
         coords = coords.to(self.device)
 
+        gps_queue = self.model.get_gps_queue()
+        gps_all = torch.cat([coords, gps_queue], dim=0)
+        self.model.dequeue_and_enqueue(coords)
+
         img_emb = F.normalize(self.model.image_encoder(imgs), dim=-1)
-        loc_emb = F.normalize(self.model.location_encoder(coords), dim=-1)
+        loc_emb = F.normalize(self.model.location_encoder(gps_all), dim=-1)
 
         logits = (img_emb @ loc_emb.T) * self.model.logit_scale.exp()
         targets = torch.arange(logits.size(0), device=self.device)
-        loss = 0.5 * (
-            F.cross_entropy(logits, targets) + F.cross_entropy(logits.T, targets)
-        )
+        loss = F.cross_entropy(logits, targets)
         self.log("train_loss", loss, prog_bar=True, on_step=False, on_epoch=True)
         self._epoch_loss_sum += loss.detach().item()
         self._epoch_loss_n += 1
@@ -99,11 +101,17 @@ class GeoClipLitModule(L.LightningModule):
         )
 
         acc25 = metrics["acc"][25]
+        last_path = self.checkpoint_path.with_name(
+            "last_" + self.checkpoint_path.name.removeprefix("best_")
+        )
+        last_path.parent.mkdir(exist_ok=True)
+        torch.save(self.model.state_dict(), last_path)
+        print(f"  -> saved last checkpoint (Acc@25km {acc25 * 100:.2f}%)")
+
         if self.best_acc25 is None or acc25 > self.best_acc25:
             self.best_acc25 = acc25
-            self.checkpoint_path.parent.mkdir(exist_ok=True)
             torch.save(self.model.state_dict(), self.checkpoint_path)
-            print(f"  -> saved checkpoint (Acc@25km {acc25 * 100:.2f}%)")
+            print(f"  -> saved best checkpoint (Acc@25km {acc25 * 100:.2f}%)")
 
     def evaluate_on_query(self) -> dict:
         self.model.eval()
