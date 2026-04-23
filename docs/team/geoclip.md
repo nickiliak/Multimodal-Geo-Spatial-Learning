@@ -27,12 +27,13 @@ image. We start from the authors' pretrained weights — zero-shot is the curren
 
 ## Evaluation protocol
 
-- **Gallery:** 101,302 index-satellite GPS points from `index/mml_index_satellite.csv`
-  (config flag `gallery.index_only: true`). Matches the MML paper's Sec 5.2 protocol.
-  Alternative configurations retained in `load_gallery_coords`: train-only (17,557) and
-  train+index (118,859) via `gallery.include_index: true`.
+- **Gallery:** 99,539 index-satellite GPS points from `index/mml_index_satellite.csv`
+  (config `gallery.source: "index"`). Matches the MML paper Sec 5.2 protocol.
+  `load_gallery_coords` also supports `source: "train"` (17,557 train-landmark GPS,
+  cluster-luck ablation) and `source: "both"` (~118k train + index).
 - **Queries:** all 18,688 query ground images (multiple images per landmark, each scored
-  against the landmark's ground-truth GPS).
+  against the landmark's ground-truth GPS). Paper reports 18,689 — one image likely
+  delisted since their internal snapshot.
 - **Metric:** Haversine distance → Accuracy @ {1, 25, 200, 750, 2500} km + median / mean
   error in km.
 - **Params:** 438M total, 10.4M trainable (linear image head + full location encoder);
@@ -40,9 +41,20 @@ image. We start from the authors' pretrained weights — zero-shot is the curren
 
 ## Zero-shot benchmark
 
-Previous run on a V100 against the **17,557-point train gallery** — config error, too
-sparse to match the paper's @1 km ceiling
-(source: [Output_28246313.out](../../Output_28246313.out)):
+Current headline run on V100, `gallery.source: "index"` (100k index-satellite gallery,
+paper protocol):
+
+| Threshold (km) | Accuracy (%) |
+|---:|---:|
+| 1    |  6.67 |
+| 25   | 28.79 |
+| 200  | 44.48 |
+| 750  | 69.07 |
+| 2500 | 91.07 |
+
+Median error 294.3 km · Mean error 724.2 km · ~8 min GPU inference.
+
+**Ablation — train-landmark gallery (not a fair comparison to the paper):**
 
 | Threshold (km) | Accuracy (%) |
 |---:|---:|
@@ -52,39 +64,56 @@ sparse to match the paper's @1 km ceiling
 | 750  | 71.26 |
 | 2500 | 91.33 |
 
-Median error 249.3 km · Mean error 686.1 km · ~7.5 min GPU inference.
-
-Updated protocol (`gallery.index_only: true`, 101,302 GPS points) pending re-run on HPC —
-numbers will be refreshed once the notebook is re-executed.
+This number looks higher than the index-gallery result but is inflated by cluster-luck —
+the 17,557 train landmarks cluster tightly in tourist cities where the 1,000 query
+landmarks also live, so the nearest train-landmark GPS is often coincidentally <1 km
+from a query (e.g. two museums in the same Manhattan block). The 100k index gallery is
+designed to eliminate this by being offset >500 m from every train landmark (paper
+Sec 3.2) — it measures real retrieval precision, not landmark co-location.
 
 ### Paper contrast
 
 | Method | Dataset | Gallery | @1 km | @25 km | @200 km | @750 km | @2500 km |
 |---|---|---:|---:|---:|---:|---:|---:|
-| GeoClip (own paper) | Im2GPS3k (global) | 100K | 14.11 | 34.47 | 50.65 | 69.67 | 83.82 |
-| Off-shelf GeoClip (MML paper) | MMlandmarks (US) | 100K | 21.37 | 36.44 | 48.57 | 71.45 | 91.50 |
-| Ours (old, wrong gallery) | MMlandmarks (US) | 17,557 | 19.22 | 34.56 | 46.84 | 71.26 | 91.33 |
-| **Ours (zero-shot, paper protocol)** | MMlandmarks (US) | 100K | _TBD_ | _TBD_ | _TBD_ | _TBD_ | _TBD_ |
+| GeoClip (own paper) | Im2GPS3k (global) | 100k | 14.11 | 34.47 | 50.65 | 69.67 | 83.82 |
+| Off-shelf GeoClip (MML paper) | MMlandmarks (US) | 100k index | **21.37** | **36.44** | 48.57 | 71.45 | 91.50 |
+| **Ours (zero-shot, paper protocol)** | MMlandmarks (US) | 100k index | **6.67** | **28.79** | 44.48 | 69.07 | 91.07 |
 
-We beat the GeoClip paper's own Im2GPS3k number because the US-only task is easier and
-the MP-16 training set overlaps with US landmarks. The earlier 2-point gap at @1 km vs
-the MML paper row was a gallery-density artefact: our 17,557 train-landmark GPS
-(spacing ~20–25 km) caps @1 km accuracy, while the paper uses a 100k index-satellite grid
-(Sec 5.2) that is deliberately offset from every train landmark by >500 m. With the same
-gallery, the two numbers should line up to within noise.
+We sit ~14 points below the MML paper at @1 km on the same dataset, same gallery, same
+off-the-shelf `geoclip` PyPI weights, same Haversine metric. That gap is **currently
+unexplained**.
 
-## Fine-tuning — status: not yet beating zero-shot
+What we ruled out in investigation:
+- Wrong gallery (professor confirmed `mml_index_satellite.csv` is correct).
+- Wrong query set (18,688 vs paper's 18,689 — off by one image, negligible).
+- Bug in our retrieval path — our `predict_batch` matches GeoCLIP's native
+  `model.predict(top_k=1)` 500/500 on a sanity subset.
+- Wrong preprocessing — tested both `CLIPProcessor` (CLIP mean/std, current) and
+  `img_val_transform` (ImageNet mean/std); CLIPProcessor is the better of the two.
+- Wrong distance metric — Haversine matches paper Sec 5.2 and agrees with
+  `geopy.distance.geodesic` to within 0.3 %.
+- Sparse-gallery floor — theoretical @1 km ceiling on this gallery is 69.69 %, well
+  above both our 6.67 % and the paper's 21.37 %.
+
+Open question: does the MML team's GeoCLIP eval use a specific checkpoint / package
+version / gallery-swap convention we haven't matched? Email sent to the first author
+(Oskar Kristoffersen) asking for the exact eval script. This doc will be updated when
+the gap is resolved.
+
+## Fine-tuning — stale, needs re-run
+
+⚠️ **The numbers below assumed the old train-landmark zero-shot baseline (19.22 % / 34.56 %).
+With the current index-gallery baseline (6.67 % / 28.79 %) the Acc@25km save gate shifts,
+so everything in this section needs to be redone.**
 
 Training is wired end-to-end in [scripts/geoclip_train.py](../../scripts/geoclip_train.py):
 symmetric InfoNCE with the pretrained `logit_scale`, Adam `lr=1e-4`, batch size 32,
 10-epoch target. After each epoch we re-embed the gallery and evaluate on the full query
-set; a checkpoint is written **only** when Acc@25km improves over the zero-shot baseline
-(34.56%).
+set; a checkpoint is written **only** when Acc@25km improves over the zero-shot baseline.
 
-First run on V100: epoch 1 Acc@1km **12.97%** (regressed from zero-shot's 19.22%),
-epoch 2 partially recovered to **15.10%**, then the job hit the 4-hour LSF wall-clock
-limit mid-epoch-3. No epoch cleared the Acc@25km gate, so no checkpoint was saved — the
-"fine-tuned" notebook still shows `_TBD_`. Work in progress.
+Historical run on V100 (stale — old baseline): epoch 1 Acc@1km 12.97 %, epoch 2 15.10 %,
+then the job hit the 4-hour LSF wall-clock limit mid-epoch-3. No epoch cleared the
+Acc@25km gate. Work in progress.
 
 ## How to run
 
