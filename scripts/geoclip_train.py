@@ -41,9 +41,7 @@ def main() -> None:
     print(f"Total parameters: {total_params:,}")
     print(f"Trainable parameters: {trainable_params:,}")
 
-    gallery_coords = load_gallery_coords(
-        data_root, include_index=cfg["gallery"]["include_index"]
-    )
+    gallery_coords = load_gallery_coords(data_root, source=cfg["gallery"]["source"])
     print(f"Gallery size: {len(gallery_coords):,} GPS points")
     print(f"Lat range: [{gallery_coords[:, 0].min():.2f}, {gallery_coords[:, 0].max():.2f}]")
     print(f"Lon range: [{gallery_coords[:, 1].min():.2f}, {gallery_coords[:, 1].max():.2f}]")
@@ -91,7 +89,7 @@ def main() -> None:
         shuffle=True,
         num_workers=num_workers,
         pin_memory=torch.cuda.is_available(),
-        drop_last=False,
+        drop_last=True,
     )
 
     trainer = L.Trainer(

@@ -1,4 +1,9 @@
-"""Zero-shot GeoClip baseline: gallery construction and batch inference."""
+"""Zero-shot GeoClip baseline: gallery construction and batch inference.
+
+Uses GeoCLIP's own functions where possible:
+- `img_val_transform` for the training-matched ImageNet-normalized preprocessing
+- `model.forward` for the image↔gallery similarity computation
+"""
 
 from __future__ import annotations
 
@@ -7,16 +12,15 @@ from pathlib import Path
 import numpy as np
 import pandas as pd
 import torch
-import torch.nn.functional as F
 from geoclip import GeoCLIP
+from geoclip.train.dataloader import img_val_transform
 from PIL import Image
 from tqdm import tqdm
 
 
 def _patch_image_encoder(encoder: torch.nn.Module) -> None:
-    """Fix for transformers>=5 where CLIP.get_image_features returns an object."""
-    original_forward = encoder.forward
-
+    """Unwrap ``BaseModelOutputWithPooling`` from newer transformers so the
+    downstream MLP receives a tensor."""
     def patched_forward(x: torch.Tensor) -> torch.Tensor:
         clip_out = encoder.CLIP.get_image_features(pixel_values=x)
         if not isinstance(clip_out, torch.Tensor):
@@ -41,36 +45,26 @@ class GeoClipBaseline:
         _patch_image_encoder(self.model.image_encoder)
         self.model.to(self.device)
         self.model.eval()
-        self._gallery_features: torch.Tensor | None = None
+        self._transform = img_val_transform()
+        self._gallery_tensor: torch.Tensor | None = None
         self._gallery_coords: np.ndarray | None = None
 
     def build_gallery(self, coords: np.ndarray) -> None:
-        """Precompute location embeddings for the GPS gallery.
+        """Register the GPS gallery for inference.
 
-        Parameters
-        ----------
-        coords : np.ndarray, shape (m, 2)
-            Gallery GPS coordinates as ``[[lat, lon], ...]``.
+        The model re-encodes the gallery on every `forward` call, matching
+        `GeoCLIP.predict`. We only cache the tensor.
         """
         self._gallery_coords = coords
-        gps_tensor = torch.tensor(coords, dtype=torch.float32).to(self.device)
-        with torch.no_grad():
-            self._gallery_features = self.model.location_encoder(gps_tensor)
-            self._gallery_features = F.normalize(self._gallery_features, dim=-1)
+        self._gallery_tensor = torch.tensor(coords, dtype=torch.float32).to(self.device)
 
     def predict_batch(
         self,
         image_paths: list[Path],
         batch_size: int = 64,
     ) -> np.ndarray:
-        """Predict GPS for a list of images against the prebuilt gallery.
-
-        Returns
-        -------
-        np.ndarray, shape (n, 2)
-            Predicted ``[[lat, lon], ...]`` for each image.
-        """
-        assert self._gallery_features is not None, "Call build_gallery() first"
+        """Predict GPS for a list of images against the prebuilt gallery."""
+        assert self._gallery_tensor is not None, "Call build_gallery() first"
 
         all_preds: list[np.ndarray] = []
         for start in tqdm(
@@ -79,52 +73,46 @@ class GeoClipBaseline:
             unit="batch",
         ):
             batch_paths = image_paths[start : start + batch_size]
-            batch_tensors = torch.cat(
-                [self._load_and_preprocess(p) for p in batch_paths], dim=0
+            batch_tensors = torch.stack(
+                [self._load_and_preprocess(p) for p in batch_paths]
             ).to(self.device)
 
             with torch.no_grad():
-                img_features = self.model.image_encoder(batch_tensors)
-                img_features = F.normalize(img_features, dim=-1)
-
-            sims = img_features @ self._gallery_features.T
-            top1_indices = sims.argmax(dim=1).cpu().numpy()
-            all_preds.append(self._gallery_coords[top1_indices])
+                logits = self.model(batch_tensors, self._gallery_tensor)
+                top1 = logits.softmax(dim=-1).argmax(dim=-1).cpu().numpy()
+            all_preds.append(self._gallery_coords[top1])
 
         return np.concatenate(all_preds, axis=0)
 
     def _load_and_preprocess(self, image_path: Path) -> torch.Tensor:
-        """Load a single image and return the preprocessed tensor."""
+        """Load a single image through GeoCLIP's training-matched transform."""
         img = Image.open(image_path).convert("RGB")
-        return self.model.image_encoder.preprocess_image(img)
+        return self._transform(img)
 
 
-def load_gallery_coords(
-    data_root: Path,
-    include_index: bool = False,
-) -> np.ndarray:
-    """Load GPS gallery coordinates from train (and optionally index) CSVs.
+_TRAIN_CSV = Path("train") / "mml_train.csv"
+_INDEX_CSV = Path("index") / "mml_index_satellite.csv"
 
-    Parameters
-    ----------
-    data_root : Path
-        Root data directory (``data/MML_Data``).
-    include_index : bool
-        If ``True``, append 101,302 index satellite GPS points.
 
-    Returns
-    -------
-    np.ndarray, shape (m, 2)
+def load_gallery_coords(data_root: Path, source: str = "index") -> np.ndarray:
+    """Load GPS gallery coordinates as ``[[lat, lon], ...]``.
+
+    ``source``:
+    - ``"train"`` — 17,557 train-landmark GPS from ``train/mml_train.csv``.
+    - ``"index"`` — ~100k index-satellite GPS from ``index/mml_index_satellite.csv``
+      (paper Sec 5.2 protocol, default).
+    - ``"both"`` — train concatenated with index (~118k).
     """
-    train_df = pd.read_csv(data_root / "train" / "mml_train.csv")
-    coords = train_df[["lat", "lon"]].values
+    def _load(rel: Path) -> np.ndarray:
+        return pd.read_csv(data_root / rel)[["lat", "lon"]].values
 
-    if include_index:
-        index_df = pd.read_csv(data_root / "index" / "mml_index_satellite.csv")
-        index_coords = index_df[["lat", "lon"]].values
-        coords = np.concatenate([coords, index_coords], axis=0)
-
-    return coords
+    if source == "train":
+        return _load(_TRAIN_CSV)
+    if source == "index":
+        return _load(a)
+    if source == "both":
+        return np.concatenate([_load(_TRAIN_CSV), _load(_INDEX_CSV)], axis=0)
+    raise ValueError(f"source must be 'train' | 'index' | 'both', got {source!r}")
 
 
 def load_query_data(

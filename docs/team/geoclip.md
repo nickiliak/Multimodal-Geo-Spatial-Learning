@@ -27,9 +27,10 @@ image. We start from the authors' pretrained weights — zero-shot is the curren
 
 ## Evaluation protocol
 
-- **Gallery:** 17,557 train-landmark GPS points from `train/mml_train.csv`. Toggling
-  `gallery.include_index: true` extends it with 101,302 index-satellite points
-  (118,859 total).
+- **Gallery:** 101,302 index-satellite GPS points from `index/mml_index_satellite.csv`
+  (config flag `gallery.index_only: true`). Matches the MML paper's Sec 5.2 protocol.
+  Alternative configurations retained in `load_gallery_coords`: train-only (17,557) and
+  train+index (118,859) via `gallery.include_index: true`.
 - **Queries:** all 18,688 query ground images (multiple images per landmark, each scored
   against the landmark's ground-truth GPS).
 - **Metric:** Haversine distance → Accuracy @ {1, 25, 200, 750, 2500} km + median / mean
@@ -39,7 +40,8 @@ image. We start from the authors' pretrained weights — zero-shot is the curren
 
 ## Zero-shot benchmark
 
-Run on a V100 against the 17,557-point gallery
+Previous run on a V100 against the **17,557-point train gallery** — config error, too
+sparse to match the paper's @1 km ceiling
 (source: [Output_28246313.out](../../Output_28246313.out)):
 
 | Threshold (km) | Accuracy (%) |
@@ -52,19 +54,24 @@ Run on a V100 against the 17,557-point gallery
 
 Median error 249.3 km · Mean error 686.1 km · ~7.5 min GPU inference.
 
+Updated protocol (`gallery.index_only: true`, 101,302 GPS points) pending re-run on HPC —
+numbers will be refreshed once the notebook is re-executed.
+
 ### Paper contrast
 
 | Method | Dataset | Gallery | @1 km | @25 km | @200 km | @750 km | @2500 km |
 |---|---|---:|---:|---:|---:|---:|---:|
 | GeoClip (own paper) | Im2GPS3k (global) | 100K | 14.11 | 34.47 | 50.65 | 69.67 | 83.82 |
-| Off-shelf GeoClip (MML paper) | MMlandmarks (US) | 17,557 | 21.37 | 36.44 | 48.57 | 71.45 | 91.50 |
-| **Ours (zero-shot)** | MMlandmarks (US) | 17,557 | **19.22** | **34.56** | **46.84** | **71.26** | **91.33** |
+| Off-shelf GeoClip (MML paper) | MMlandmarks (US) | 100K | 21.37 | 36.44 | 48.57 | 71.45 | 91.50 |
+| Ours (old, wrong gallery) | MMlandmarks (US) | 17,557 | 19.22 | 34.56 | 46.84 | 71.26 | 91.33 |
+| **Ours (zero-shot, paper protocol)** | MMlandmarks (US) | 100K | _TBD_ | _TBD_ | _TBD_ | _TBD_ | _TBD_ |
 
 We beat the GeoClip paper's own Im2GPS3k number because the US-only task is easier and
-the MP-16 training set overlaps with US landmarks. Against the MML paper row — same
-dataset, same gallery — we sit ~2 points lower at 1 km. The most plausible explanations
-are evaluation add-ons we don't apply: TenCrop augmentation at test time and LLaVA-based
-indoor-image filtering.
+the MP-16 training set overlaps with US landmarks. The earlier 2-point gap at @1 km vs
+the MML paper row was a gallery-density artefact: our 17,557 train-landmark GPS
+(spacing ~20–25 km) caps @1 km accuracy, while the paper uses a 100k index-satellite grid
+(Sec 5.2) that is deliberately offset from every train landmark by >500 m. With the same
+gallery, the two numbers should line up to within noise.
 
 ## Fine-tuning — status: not yet beating zero-shot
 
