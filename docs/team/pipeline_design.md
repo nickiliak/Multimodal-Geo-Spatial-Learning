@@ -77,7 +77,78 @@ Evaluation reuses the existing haversine-threshold metrics (1, 25, 200, 750, 250
 
 Editable source: [Excalidraw link](https://excalidraw.com/#json=6qRY-0k3QTwo4Dn4wdex-,KVth8kEMTptbSrqdq14Q6g).
 
-## 7. References
+## 7. Current status and what would raise the grade
+
+The sections above describe the *intended* pipeline. This section reconciles it with what is
+actually in the repo today, and calls out the concrete items most likely to improve the final
+grade given the project brief ([MultiModalGeolocalization.pdf](../../MultiModalGeolocalization.pdf)).
+
+### 7.1 Where the code is today
+
+| Stage | Status | Key files |
+|---|---|---|
+| 1. GeoCLIP ground → GPS | zero-shot evaluated; fine-tune scaffolded, metrics TBD | [src/mmgeo/geolocalizations/geoclip/](../../src/mmgeo/geolocalizations/geoclip/), [notebooks/team/04_geoclip_finetuned.ipynb](../../notebooks/team/04_geoclip_finetuned.ipynb) |
+| 2. GPS-based satellite narrowing | **not implemented** | — |
+| 3. Sample4Geo ground ↔ satellite | trained (ConvNeXt-B, 35 epochs) and evaluated standalone | [src/mmgeo/crossview/](../../src/mmgeo/crossview/), [configs/crossview_convnext_base.yaml](../../configs/crossview_convnext_base.yaml) |
+| 4. Joint loss (α·L_gps + β·L_sat) | **not implemented** | — |
+| Wikipedia text modality | **not implemented** | — |
+
+### 7.2 Numbers on hand
+
+- **GeoCLIP zero-shot** (paper protocol: 100k `mml_index_satellite.csv` gallery,
+  18,688 query ground images; from `03_geoclip_zeroshot.ipynb` / [geoclip.md](./geoclip.md)):
+  Acc@1km **6.67%**, @25km **28.79%**, @200km **44.48%**, @750km **69.07%**, @2500km **91.07%**;
+  median error 294.3 km, mean 724.2 km. Sits ~14 points below the MML paper's 21.37% @1km
+  on the same dataset/gallery — gap currently unexplained (email out to the first author).
+  A 17,557 train-landmark gallery ablation scores 19.22% @1km but is inflated by cluster-luck
+  (train and query landmarks co-locate in the same tourist cities) and is not comparable to
+  the paper.
+- **Sample4Geo standalone** (ConvNeXt-B, ep 35, `logs/crossview_base_28262514.out`):
+  G2S R@1 **17.60%**, R@5 **33.00%**, R@10 **41.00%**, mAP@1000 **25.46%**; S2G R@1 5.30%.
+- Fine-tuned GeoCLIP, two-stage combined, and any multimodal variant: **TBD**.
+
+### 7.3 Gap relative to the brief
+
+The brief explicitly asks for items we have not delivered yet:
+
+- **Wikipedia text modality** — the brief lists "strategies for encoding Wikipedia text" as one
+  of the two extensions. No code path touches landmark text today.
+- **Baseline-vs-multimodal comparison** — each component has its own metrics, but no unified
+  table compares them on the same query set with the same thresholds.
+- **Benchmark transfer** — the brief asks how well the model adapts to other benchmarks
+  (Uni-1652, or a held-out test set). Not attempted.
+- **Written answers to the design questions** — "separate encoders?" and "which training
+  objectives?" are posed in the brief but not argued in writing.
+
+### 7.4 Priorities to raise the grade
+
+Ordered roughly by impact ÷ effort.
+
+1. **Close the pipeline end-to-end.** Implement Stage 2 with the default hard-radius
+   strategy (§5 Q1) and run Stage 1 → Stage 2 → Stage 3 on the full query set
+   (18,688 ground images across 1,000 landmarks). Until this exists the "multimodal
+   pipeline" only lives in the design doc.
+2. **Add the Wikipedia text modality.** Encode each landmark's text with the CLIP text
+   encoder (already loaded). Simplest useful variant: late fusion — re-rank Sample4Geo's
+   top-K by `cos(text_emb, image_emb)`. Stretch: early fusion at the GeoCLIP head.
+   Directly answers the brief's text-encoding bullet with low incremental effort.
+3. **Joint-loss training (Stage 4).** Once the pipeline is closed, run
+   `L_total = α·L_gps + β·L_sat` end-to-end. Start α = β = 1 and sweep.
+4. **One unified comparison table.** Same metrics (Acc@1/25/200/750/2500 km,
+   median/mean error, R@1/5/10) across: zero-shot GeoCLIP · fine-tuned GeoCLIP ·
+   Sample4Geo alone · two-stage · two-stage + text. This table *is* the brief's
+   "evaluate and compare" deliverable.
+5. **Benchmark transfer.** At minimum, evaluate the final model on a held-out
+   MMLandmarks split not used during training. Stretch: Uni-1652.
+6. **Ablations that justify the design choices.** Narrowing strategy (hard radius vs.
+   top-K), α/β sweep, shared vs. separate text encoder. Each becomes one row in the
+   comparison table and lets us argue the §5 open questions from evidence rather than
+   intuition.
+7. **Error analysis.** Haversine-error histogram on queries plus qualitative cases
+   where Stage-1 error exceeds the radius, so Stage 3 can never recover. This
+   motivates the confidence-thresholded radius proposed in §5 Q5.
+
+## 8. References
 - [sample4geo.pdf](../../papers/sample4geo.pdf) — Deuser et al., *Sample4Geo: Hard Negative Sampling For Cross-View Geo-Localisation*, ICCV 2023.
 - [MultiModalGeolocalization.pdf](../../MultiModalGeolocalization.pdf) — Kristoffersen, project brief with the MMLandmarks task description.
 - [src/mmgeo/geolocalizations/geoclip/](../../src/mmgeo/geolocalizations/geoclip/) — existing GeoClip baseline (dataset, lit_module, baseline, evaluate).
