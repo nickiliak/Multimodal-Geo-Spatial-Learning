@@ -109,7 +109,7 @@ def load_gallery_coords(data_root: Path, source: str = "index") -> np.ndarray:
     if source == "train":
         return _load(_TRAIN_CSV)
     if source == "index":
-        return _load(a)
+        return _load(_INDEX_CSV)
     if source == "both":
         return np.concatenate([_load(_TRAIN_CSV), _load(_INDEX_CSV)], axis=0)
     raise ValueError(f"source must be 'train' | 'index' | 'both', got {source!r}")
