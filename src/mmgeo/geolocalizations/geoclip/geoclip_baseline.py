@@ -1,8 +1,10 @@
 """Zero-shot GeoClip baseline: gallery construction and batch inference.
 
 Uses GeoCLIP's own functions where possible:
-- `img_val_transform` for the training-matched ImageNet-normalized preprocessing
-- `model.forward` for the image↔gallery similarity computation
+- `model.image_encoder.preprocess_image` (CLIPProcessor) for preprocessing
+  — matches what the pretrained weights were actually trained with;
+  `img_val_transform` (ImageNet norm) was tested and is strictly worse.
+- `model.forward` for the image↔gallery similarity computation.
 """
 
 from __future__ import annotations
@@ -13,7 +15,6 @@ import numpy as np
 import pandas as pd
 import torch
 from geoclip import GeoCLIP
-from geoclip.train.dataloader import img_val_transform
 from PIL import Image
 from tqdm import tqdm
 
@@ -45,7 +46,6 @@ class GeoClipBaseline:
         _patch_image_encoder(self.model.image_encoder)
         self.model.to(self.device)
         self.model.eval()
-        self._transform = img_val_transform()
         self._gallery_tensor: torch.Tensor | None = None
         self._gallery_coords: np.ndarray | None = None
 
@@ -85,9 +85,9 @@ class GeoClipBaseline:
         return np.concatenate(all_preds, axis=0)
 
     def _load_and_preprocess(self, image_path: Path) -> torch.Tensor:
-        """Load a single image through GeoCLIP's training-matched transform."""
+        """Load a single image through GeoCLIP's CLIPProcessor preprocessing."""
         img = Image.open(image_path).convert("RGB")
-        return self._transform(img)
+        return self.model.image_encoder.preprocess_image(img).squeeze(0)
 
 
 _TRAIN_CSV = Path("train") / "mml_train.csv"
