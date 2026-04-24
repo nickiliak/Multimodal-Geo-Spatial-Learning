@@ -30,7 +30,7 @@ data/
 outputs/jobs
 models/*
 !models/.gitkeep
-
+outputs/hybrid_cache
 # OS
 .DS_Store
 Thumbs.db

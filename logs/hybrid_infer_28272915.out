@@ -1,0 +1,187 @@
+--------------------------------------------------
+Job ID: 28272915 | Node: n-62-20-11 | Date: Fri Apr 24 20:44:22 CEST 2026
+--------------------------------------------------
+Fri Apr 24 20:44:22 2026       
++-----------------------------------------------------------------------------------------+
+| NVIDIA-SMI 580.126.20             Driver Version: 580.126.20     CUDA Version: 13.0     |
++-----------------------------------------+------------------------+----------------------+
+| GPU  Name                 Persistence-M | Bus-Id          Disp.A | Volatile Uncorr. ECC |
+| Fan  Temp   Perf          Pwr:Usage/Cap |           Memory-Usage | GPU-Util  Compute M. |
+|                                         |                        |               MIG M. |
+|=========================================+========================+======================|
+|   0  Tesla V100-SXM2-32GB           On  |   00000000:3B:00.0 Off |                    0 |
+| N/A   38C    P0             43W /  300W |       0MiB /  32768MiB |      0%   E. Process |
+|                                         |                        |                  N/A |
++-----------------------------------------+------------------------+----------------------+
+
++-----------------------------------------------------------------------------------------+
+| Processes:                                                                              |
+|  GPU   GI   CI              PID   Type   Process name                        GPU Memory |
+|        ID   ID                                                               Usage      |
+|=========================================================================================|
+|  No running processes found                                                             |
++-----------------------------------------------------------------------------------------+
+>>> Syncing environment with uv...
+>>> Validating PyTorch CUDA...
+PyTorch 2.5.1+cu121, CUDA available: True
+GPU: Tesla V100-SXM2-32GB
+>>> Running hybrid inference sweep...
+[run_hybrid_inference] device=cuda
+[run_hybrid_inference] radii_km=[5.0, 25.0, 100.0, 500.0, 2000.0, inf]
+[run_hybrid_inference] index_modes=['query', 'full']
+[run_hybrid_inference] query_modes=['one_per_landmark', 'all']
+[run_hybrid_inference] fallbacks=['fail', 'fallback_full']
+[HybridPipeline] loading GeoCLIP...
+[HybridPipeline] GeoCLIP gallery source='paper', size=100539
+[HybridPipeline] loading Sample4Geo...
+[CrossViewModel] backbone=convnext_base.fb_in22k, feature_dim=1024, embed_dim=1024, params=87.6M
+[Sample4Geo] loaded models/best1.pt (epoch=19, backbone=convnext_base.fb_in22k)
+[Gallery] built query in 28.9s, saved to outputs/hybrid_cache/sat_gallery_query.pt
+[HybridPipeline] one_per_landmark ground queries: 1000
+  [query/one_per_landmark] radius=5km fb=         fail mAP@1k=0.1113 R@1=0.0800 R@5=0.1430 R@10=0.1600 empty=0.505 mean_cand=5.0 rerank=2.16ms/q
+  [query/one_per_landmark] radius=5km fb=fallback_full mAP@1k=0.1602 R@1=0.1040 R@5=0.2130 R@10=0.2690 empty=0.505 mean_cand=5.0 rerank=0.01ms/q
+  [query/one_per_landmark] radius=25km fb=         fail mAP@1k=0.1295 R@1=0.0900 R@5=0.1660 R@10=0.1960 empty=0.296 mean_cand=14.3 rerank=0.01ms/q
+  [query/one_per_landmark] radius=25km fb=fallback_full mAP@1k=0.1584 R@1=0.1020 R@5=0.2110 R@10=0.2680 empty=0.296 mean_cand=14.3 rerank=0.01ms/q
+  [query/one_per_landmark] radius=100km fb=         fail mAP@1k=0.1539 R@1=0.1020 R@5=0.2010 R@10=0.2540 empty=0.054 mean_cand=29.6 rerank=0.01ms/q
+  [query/one_per_landmark] radius=100km fb=fallback_full mAP@1k=0.1597 R@1=0.1040 R@5=0.2110 R@10=0.2720 empty=0.054 mean_cand=29.6 rerank=0.01ms/q
+  [query/one_per_landmark] radius=500km fb=         fail mAP@1k=0.1761 R@1=0.1010 R@5=0.2430 R@10=0.3110 empty=0.000 mean_cand=165.9 rerank=0.01ms/q
+  [query/one_per_landmark] radius=500km fb=fallback_full mAP@1k=0.1761 R@1=0.1010 R@5=0.2430 R@10=0.3110 empty=0.000 mean_cand=165.9 rerank=0.01ms/q
+  [query/one_per_landmark] radius=2000km fb=         fail mAP@1k=0.1322 R@1=0.0630 R@5=0.1860 R@10=0.2720 empty=0.000 mean_cand=625.0 rerank=0.01ms/q
+  [query/one_per_landmark] radius=2000km fb=fallback_full mAP@1k=0.1322 R@1=0.0630 R@5=0.1860 R@10=0.2720 empty=0.000 mean_cand=625.0 rerank=0.01ms/q
+  [query/one_per_landmark] radius=infkm fb=         fail mAP@1k=0.1134 R@1=0.0530 R@5=0.1570 R@10=0.2340 empty=0.000 mean_cand=1000.0 rerank=0.01ms/q
+  [query/one_per_landmark] radius=infkm fb=fallback_full mAP@1k=0.1134 R@1=0.0530 R@5=0.1570 R@10=0.2340 empty=0.000 mean_cand=1000.0 rerank=0.01ms/q
+[Gallery] cache hit: outputs/hybrid_cache/sat_gallery_query.pt
+[HybridPipeline] all ground queries: 18688
+  [query/all] radius=5km fb=         fail mAP@1k=0.1714 R@1=0.1325 R@5=0.2102 R@10=0.2479 empty=0.393 mean_cand=9.1 rerank=0.01ms/q
+  [query/all] radius=5km fb=fallback_full mAP@1k=0.2064 R@1=0.1498 R@5=0.2608 R@10=0.3206 empty=0.393 mean_cand=9.1 rerank=0.01ms/q
+  [query/all] radius=25km fb=         fail mAP@1k=0.1797 R@1=0.1329 R@5=0.2265 R@10=0.2706 empty=0.224 mean_cand=20.9 rerank=0.01ms/q
+  [query/all] radius=25km fb=fallback_full mAP@1k=0.1993 R@1=0.1425 R@5=0.2544 R@10=0.3111 empty=0.224 mean_cand=20.9 rerank=0.01ms/q
+  [query/all] radius=100km fb=         fail mAP@1k=0.1931 R@1=0.1364 R@5=0.2516 R@10=0.3054 empty=0.032 mean_cand=35.8 rerank=0.01ms/q
+  [query/all] radius=100km fb=fallback_full mAP@1k=0.1971 R@1=0.1387 R@5=0.2572 R@10=0.3132 empty=0.032 mean_cand=35.8 rerank=0.01ms/q
+  [query/all] radius=500km fb=         fail mAP@1k=0.1821 R@1=0.1063 R@5=0.2549 R@10=0.3402 empty=0.000 mean_cand=174.8 rerank=0.01ms/q
+  [query/all] radius=500km fb=fallback_full mAP@1k=0.1821 R@1=0.1063 R@5=0.2549 R@10=0.3402 empty=0.000 mean_cand=174.8 rerank=0.01ms/q
+  [query/all] radius=2000km fb=         fail mAP@1k=0.1299 R@1=0.0602 R@5=0.1822 R@10=0.2680 empty=0.000 mean_cand=622.0 rerank=0.01ms/q
+  [query/all] radius=2000km fb=fallback_full mAP@1k=0.1299 R@1=0.0602 R@5=0.1822 R@10=0.2680 empty=0.000 mean_cand=622.0 rerank=0.01ms/q
+  [query/all] radius=infkm fb=         fail mAP@1k=0.1136 R@1=0.0517 R@5=0.1557 R@10=0.2338 empty=0.000 mean_cand=1000.0 rerank=0.01ms/q
+  [query/all] radius=infkm fb=fallback_full mAP@1k=0.1136 R@1=0.0517 R@5=0.1557 R@10=0.2338 empty=0.000 mean_cand=1000.0 rerank=0.01ms/q
+[Gallery] built full in 886.2s, saved to outputs/hybrid_cache/sat_gallery_full.pt
+[HybridPipeline] one_per_landmark ground queries: 1000
+  [full/one_per_landmark] radius=5km fb=         fail mAP@1k=0.0815 R@1=0.0530 R@5=0.1050 R@10=0.1280 empty=0.000 mean_cand=47.0 rerank=0.10ms/q
+  [full/one_per_landmark] radius=5km fb=fallback_full mAP@1k=0.0815 R@1=0.0530 R@5=0.1050 R@10=0.1280 empty=0.000 mean_cand=47.0 rerank=0.06ms/q
+  [full/one_per_landmark] radius=25km fb=         fail mAP@1k=0.0744 R@1=0.0440 R@5=0.1040 R@10=0.1280 empty=0.000 mean_cand=420.3 rerank=0.06ms/q
+  [full/one_per_landmark] radius=25km fb=fallback_full mAP@1k=0.0744 R@1=0.0440 R@5=0.1040 R@10=0.1280 empty=0.000 mean_cand=420.3 rerank=0.06ms/q
+  [full/one_per_landmark] radius=100km fb=         fail mAP@1k=0.0743 R@1=0.0440 R@5=0.1060 R@10=0.1250 empty=0.000 mean_cand=1949.3 rerank=0.06ms/q
+  [full/one_per_landmark] radius=100km fb=fallback_full mAP@1k=0.0743 R@1=0.0440 R@5=0.1060 R@10=0.1250 empty=0.000 mean_cand=1949.3 rerank=0.06ms/q
+  [full/one_per_landmark] radius=500km fb=         fail mAP@1k=0.0659 R@1=0.0360 R@5=0.0950 R@10=0.1210 empty=0.000 mean_cand=15319.4 rerank=0.06ms/q
+  [full/one_per_landmark] radius=500km fb=fallback_full mAP@1k=0.0659 R@1=0.0360 R@5=0.0950 R@10=0.1210 empty=0.000 mean_cand=15319.4 rerank=0.06ms/q
+  [full/one_per_landmark] radius=2000km fb=         fail mAP@1k=0.0449 R@1=0.0220 R@5=0.0610 R@10=0.0840 empty=0.000 mean_cand=62810.0 rerank=0.06ms/q
+  [full/one_per_landmark] radius=2000km fb=fallback_full mAP@1k=0.0449 R@1=0.0220 R@5=0.0610 R@10=0.0840 empty=0.000 mean_cand=62810.0 rerank=0.06ms/q
+  [full/one_per_landmark] radius=infkm fb=         fail mAP@1k=0.0379 R@1=0.0200 R@5=0.0470 R@10=0.0690 empty=0.000 mean_cand=100539.0 rerank=0.06ms/q
+  [full/one_per_landmark] radius=infkm fb=fallback_full mAP@1k=0.0379 R@1=0.0200 R@5=0.0470 R@10=0.0690 empty=0.000 mean_cand=100539.0 rerank=0.06ms/q
+[Gallery] cache hit: outputs/hybrid_cache/sat_gallery_full.pt
+[HybridPipeline] all ground queries: 18688
+  [full/all] radius=5km fb=         fail mAP@1k=0.1253 R@1=0.0822 R@5=0.1664 R@10=0.2103 empty=0.000 mean_cand=54.7 rerank=0.05ms/q
+  [full/all] radius=5km fb=fallback_full mAP@1k=0.1253 R@1=0.0822 R@5=0.1664 R@10=0.2103 empty=0.000 mean_cand=54.7 rerank=0.05ms/q
+  [full/all] radius=25km fb=         fail mAP@1k=0.1138 R@1=0.0729 R@5=0.1541 R@10=0.1969 empty=0.000 mean_cand=530.9 rerank=0.05ms/q
+  [full/all] radius=25km fb=fallback_full mAP@1k=0.1138 R@1=0.0729 R@5=0.1541 R@10=0.1969 empty=0.000 mean_cand=530.9 rerank=0.05ms/q
+  [full/all] radius=100km fb=         fail mAP@1k=0.1018 R@1=0.0604 R@5=0.1412 R@10=0.1878 empty=0.000 mean_cand=2176.2 rerank=0.05ms/q
+  [full/all] radius=100km fb=fallback_full mAP@1k=0.1018 R@1=0.0604 R@5=0.1412 R@10=0.1878 empty=0.000 mean_cand=2176.2 rerank=0.05ms/q
+  [full/all] radius=500km fb=         fail mAP@1k=0.0834 R@1=0.0451 R@5=0.1150 R@10=0.1628 empty=0.000 mean_cand=15916.2 rerank=0.05ms/q
+  [full/all] radius=500km fb=fallback_full mAP@1k=0.0834 R@1=0.0451 R@5=0.1150 R@10=0.1628 empty=0.000 mean_cand=15916.2 rerank=0.05ms/q
+  [full/all] radius=2000km fb=         fail mAP@1k=0.0545 R@1=0.0235 R@5=0.0735 R@10=0.1156 empty=0.000 mean_cand=62469.5 rerank=0.05ms/q
+  [full/all] radius=2000km fb=fallback_full mAP@1k=0.0545 R@1=0.0235 R@5=0.0735 R@10=0.1156 empty=0.000 mean_cand=62469.5 rerank=0.05ms/q
+  [full/all] radius=infkm fb=         fail mAP@1k=0.0480 R@1=0.0207 R@5=0.0626 R@10=0.0993 empty=0.000 mean_cand=100539.0 rerank=0.05ms/q
+  [full/all] radius=infkm fb=fallback_full mAP@1k=0.0480 R@1=0.0207 R@5=0.0626 R@10=0.0993 empty=0.000 mean_cand=100539.0 rerank=0.05ms/q
+
+[full_sweep] wrote outputs/hybrid/results_28272915.json
+[full_sweep] wrote outputs/hybrid/results_28272915.csv
+Job finished at Fri Apr 24 21:44:57 CEST 2026
+
+------------------------------------------------------------
+Sender: LSF System <lsfadmin@hpc.dtu.dk>
+Subject: Job 28272915: <hybrid_infer> in cluster <dcc> Done
+
+Job <hybrid_infer> was submitted from host <hpclogin1> by user <s250219> in cluster <dcc> at Fri Apr 24 20:38:01 2026
+Job was executed on host(s) <6*n-62-20-11>, in queue <gpuv100>, as user <s250219> in cluster <dcc> at Fri Apr 24 20:44:20 2026
+</zhome/70/7/219373> was used as the home directory.
+</zhome/70/7/219373/Multimodal-Geo-Spatial-Learning> was used as the working directory.
+Started at Fri Apr 24 20:44:20 2026
+Terminated at Fri Apr 24 21:44:57 2026
+Results reported at Fri Apr 24 21:44:57 2026
+
+Your job looked like:
+
+------------------------------------------------------------
+# LSBATCH: User input
+#!/bin/bash
+#BSUB -J hybrid_infer
+#BSUB -q gpuv100
+#BSUB -gpu "num=1:mode=exclusive_process"
+#BSUB -R "select[gpu32gb]"
+#BSUB -n 6
+#BSUB -R "span[hosts=1] rusage[mem=24GB]"
+#BSUB -W 6:00
+#BSUB -o logs/hybrid_infer_%J.out
+#BSUB -e logs/hybrid_infer_%J.err
+
+set -e
+
+mkdir -p logs outputs/hybrid outputs/hybrid_cache
+cd ~/Multimodal-Geo-Spatial-Learning || { echo "Project directory not found"; exit 1; }
+
+echo "--------------------------------------------------"
+echo "Job ID: $LSB_JOBID | Node: $(hostname) | Date: $(date)"
+echo "--------------------------------------------------"
+nvidia-smi
+
+echo ">>> Syncing environment with uv..."
+uv sync
+
+echo ">>> Validating PyTorch CUDA..."
+uv run --no-sync python -c "
+import torch
+print(f'PyTorch {torch.__version__}, CUDA available: {torch.cuda.is_available()}')
+assert torch.cuda.is_available(), 'CUDA unavailable'
+print(f'GPU: {torch.cuda.get_device_name(0)}')
+"
+
+echo ">>> Running hybrid inference sweep..."
+uv run --no-sync python scripts/run_hybrid_inference.py \
+    --data-root data/MML_Data \
+    --ckpt models/best1.pt \
+    --cache-dir outputs/hybrid_cache \
+    --output outputs/hybrid/results_${LSB_JOBID}.json \
+    --radii-km 5,25,100,500,2000,inf \
+    --index-modes query full \
+    --query-modes one_per_landmark all \
+    --fallbacks fail fallback_full \
+    --num-workers 6 \
+    --batch-size 128
+
+echo "Job finished at $(date)"
+
+------------------------------------------------------------
+
+Successfully completed.
+
+Resource usage summary:
+
+    CPU time :                                   8135.00 sec.
+    Max Memory :                                 4675 MB
+    Average Memory :                             2640.17 MB
+    Total Requested Memory :                     147456.00 MB
+    Delta Memory :                               142781.00 MB
+    Max Swap :                                   -
+    Max Processes :                              11
+    Max Threads :                                47
+    Run time :                                   3637 sec.
+    Turnaround time :                            4016 sec.
+
+The output (if any) is above this job summary.
+
+
+
+PS:
+
+Read file <logs/hybrid_infer_28272915.err> for stderr output of this job.
+
