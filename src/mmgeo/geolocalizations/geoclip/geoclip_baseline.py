@@ -92,16 +92,19 @@ class GeoClipBaseline:
 
 _TRAIN_CSV = Path("train") / "mml_train.csv"
 _INDEX_CSV = Path("index") / "mml_index_satellite.csv"
+_QUERY_CSV = Path("query") / "mml_query.csv"
 
 
-def load_gallery_coords(data_root: Path, source: str = "index") -> np.ndarray:
+def load_gallery_coords(data_root: Path, source: str = "paper") -> np.ndarray:
     """Load GPS gallery coordinates as ``[[lat, lon], ...]``.
 
     ``source``:
-    - ``"train"`` — 17,557 train-landmark GPS from ``train/mml_train.csv``.
-    - ``"index"`` — ~100k index-satellite GPS from ``index/mml_index_satellite.csv``
-      (paper Sec 5.2 protocol, default).
-    - ``"both"`` — train concatenated with index (~118k).
+    - ``"train"`` — 17,557 train-landmark GPS.
+    - ``"index"`` — ~100k index-satellite GPS (honest "in-the-wild" gallery).
+    - ``"paper"`` — ~100k index + 1,000 query-landmark GPS = ~101k. Matches the
+      camera-ready MML paper Sec 5.2 protocol and reproduces the 21.37 % @1 km
+      number. The query GPS being in the gallery makes this an *upper bound*.
+    - ``"both"`` — train + index (~118k).
     """
     def _load(rel: Path) -> np.ndarray:
         return pd.read_csv(data_root / rel)[["lat", "lon"]].values
@@ -110,9 +113,13 @@ def load_gallery_coords(data_root: Path, source: str = "index") -> np.ndarray:
         return _load(_TRAIN_CSV)
     if source == "index":
         return _load(_INDEX_CSV)
+    if source == "paper":
+        return np.concatenate([_load(_INDEX_CSV), _load(_QUERY_CSV)], axis=0)
     if source == "both":
         return np.concatenate([_load(_TRAIN_CSV), _load(_INDEX_CSV)], axis=0)
-    raise ValueError(f"source must be 'train' | 'index' | 'both', got {source!r}")
+    raise ValueError(
+        f"source must be 'train' | 'index' | 'paper' | 'both', got {source!r}"
+    )
 
 
 def load_query_data(

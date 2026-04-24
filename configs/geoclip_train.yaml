@@ -2,7 +2,7 @@ data:
   root: "data/MML_Data"
 
 gallery:
-  source: index      # "train" (17k) | "index" (100k, paper Sec 5.2) | "both" (118k)
+  source: paper      # "train" (17k) | "index" (100k, honest in-the-wild) | "paper" (101k, index+query, reproduces paper's 21.37%) | "both" (118k)
 
 inference:
   batch_size: 64
