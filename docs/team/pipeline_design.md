@@ -95,14 +95,19 @@ grade given the project brief ([MultiModalGeolocalization.pdf](../../MultiModalG
 
 ### 7.2 Numbers on hand
 
-- **GeoCLIP zero-shot** (paper protocol: 100k `mml_index_satellite.csv` gallery,
-  18,688 query ground images; from `03_geoclip_zeroshot.ipynb` / [geoclip.md](./geoclip.md)):
-  Acc@1km **6.67%**, @25km **28.79%**, @200km **44.48%**, @750km **69.07%**, @2500km **91.07%**;
-  median error 294.3 km, mean 724.2 km. Sits ~14 points below the MML paper's 21.37% @1km
-  on the same dataset/gallery — gap currently unexplained (email out to the first author).
-  A 17,557 train-landmark gallery ablation scores 19.22% @1km but is inflated by cluster-luck
-  (train and query landmarks co-locate in the same tourist cities) and is not comparable to
-  the paper.
+- **GeoCLIP zero-shot** (18,688 query ground images; from `03_geoclip_zeroshot.ipynb` / [geoclip.md](./geoclip.md)):
+  - **Paper protocol** (`gallery.source: paper`, 100,539 GPS = index + query landmarks) —
+    Acc@1km **21.35%**, @25km **36.44%**, @200km **48.61%**, @750km **71.41%**, @2500km **91.52%**;
+    median error 225.2 km, mean 674.6 km. Reproduces the MML paper's Table 3 row to within
+    0.02 points; this is an **upper bound** because every query's GT GPS sits in the gallery.
+  - **Honest in-the-wild** (`gallery.source: index`, 99,539 GPS, no query leakage) —
+    Acc@1km **6.67%**, @25km **28.79%**, @200km **44.48%**, @750km **69.07%**, @2500km **91.07%**;
+    median error 294.3 km, mean 724.2 km. Per the paper's first author: *"21% is a
+    geolocalization upper limit, 6.67% is more realistic in the wild."* Use this as the
+    comparison baseline for any fine-tuning work.
+  - A 17,557 train-landmark gallery ablation scores 19.22% @1km but is inflated by cluster-luck
+    (train and query landmarks co-locate in the same tourist cities) and is not comparable to
+    either paper gallery.
 - **Sample4Geo standalone** (ConvNeXt-B, ep 35, `logs/crossview_base_28262514.out`):
   G2S R@1 **17.60%**, R@5 **33.00%**, R@10 **41.00%**, mAP@1000 **25.46%**; S2G R@1 5.30%.
 - Fine-tuned GeoCLIP, two-stage combined, and any multimodal variant: **TBD**.

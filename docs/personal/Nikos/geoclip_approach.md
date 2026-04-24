@@ -134,75 +134,67 @@ guarded with a path existence check.
 
 #### Phase 1 — Zero-Shot Baseline (pretrained GeoClip, no fine-tuning) ✅ DONE
 
-**Goal:** Measure out-of-the-box performance as lower bound.
+**Goal:** Measure out-of-the-box performance. The notebook runs both gallery protocols
+in one HPC submit; see [docs/team/geoclip.md](../../team/geoclip.md) for the canonical
+team-facing writeup.
 
-1. Build GPS gallery from `data/MML_Data/train/mml_train.csv` (17,557 coordinates).
-2. For each of the 1,000 query landmarks, pick the first ground image, get embedding, retrieve top-1 GPS.
-3. Compute accuracy @ {1, 25, 200, 750, 2500} km (Haversine distance).
+1. Build both GPS galleries: `"paper"` (100,539 = 99,539 index-satellite + 1,000 query-
+   landmark coords, matches MML paper Sec 5.2) and `"index"` (99,539 index-only, no
+   query leakage).
+2. For all 18,688 query ground images, get CLIP+MLP embedding, retrieve top-1 GPS per
+   source via `model.forward` + softmax + argmax.
+3. Compute Accuracy @ {1, 25, 200, 750, 2500} km (Haversine).
 
-**Results** (CPU, batch_size=64, 17,557-point gallery):
+**Results** (V100, batch_size=64, ~8 min per source, one HPC submit for both):
 
-| Threshold | Accuracy |
-|-----------|----------|
-| 1 km      | 11.30%   |
-| 25 km     | 23.40%   |
-| 200 km    | 43.10%   |
-| 750 km    | 72.40%   |
-| 2500 km   | 93.90%   |
+| Threshold | `paper` gallery (101k) | `index` gallery (99k) |
+|---|---:|---:|
+| 1 km    | **21.35%** | **6.67%**  |
+| 25 km   | **36.44%** | **28.79%** |
+| 200 km  | 48.61%     | 44.48%     |
+| 750 km  | 71.41%     | 69.07%     |
+| 2500 km | 91.52%     | 91.07%     |
 
-Median error: 279.8 km — Mean error: 626.5 km — Inference: ~20 min on CPU
+Median / mean error: 225.2 / 674.6 km (paper) · 294.3 / 724.2 km (index).
 
 **Comparison across papers and our results:**
 
 | Method | Dataset | Gallery | @1 km | @25 km | @200 km | @750 km | @2500 km |
 |--------|---------|--------:|------:|-------:|--------:|--------:|---------:|
-| GeoClip (own paper, Table 1) | Im2GPS3k (global) | 100K | 14.11 | 34.47 | 50.65 | 69.67 | 83.82 |
-| GeoClip off-shelf (MML paper, Table 3) | MMlandmarks (US) | ? | 21.37 | 36.44 | 48.57 | 71.45 | 91.50 |
-| MMCLIP (trained on MML) | MMlandmarks (US) | ? | 18.72 | 33.15 | 56.20 | 73.78 | 91.50 |
-| **Our zero-shot** | MMlandmarks (US) | 17,557 | 11.30 | 23.40 | 43.10 | 72.40 | 93.90 |
+| GeoClip (own paper, Table 1) | Im2GPS3k (global) | 100k | 14.11 | 34.47 | 50.65 | 69.67 | 83.82 |
+| GeoClip off-shelf (MML paper, Table 3) | MMlandmarks (US) | 101k index+query | 21.37 | 36.44 | 48.57 | 71.45 | 91.50 |
+| MMCLIP (trained on MML) | MMlandmarks (US) | 101k | 18.72 | 33.15 | 56.20 | 73.78 | 91.50 |
+| **Ours (`paper`)** | MMlandmarks (US) | 101k index+query | **21.35** | **36.44** | 48.61 | 71.41 | 91.52 |
+| **Ours (`index`)** | MMlandmarks (US) | 100k index only | **6.67** | **28.79** | 44.48 | 69.07 | 91.07 |
 
-**Key observation:** Our 11.30% @ 1 km is actually close to GeoClip's own benchmark of
-14.11% on Im2GPS3k. The small gap is explained by:
-- Smaller gallery (17,557 vs 100K GPS points)
-- No TenCrop augmentation (GeoClip paper uses 5 crops + flips, averaging predictions)
-- Single image per landmark (vs multi-image evaluation)
+**Key takeaway:** we reproduce the MML paper's Table 3 row to within 0.02 points (the
+`paper` row). The reason the paper's number is so much higher than GeoCLIP's own
+Im2GPS3k 14.11% is **gallery leakage**: the MML paper's gallery is `index ∪ query
+landmarks`, so every query's GT GPS is already in the gallery — the model just has to
+retrieve the right one out of 100,539 candidates. Per Oskar Kristoffersen (first author):
+*"21% is a geolocalization upper limit; 6.67% is more realistic in the wild."*
 
-The real anomaly is the MMlandmarks paper reporting 21.37% for off-shelf GeoClip — much
-higher than GeoClip's own 14.11% on Im2GPS3k. Likely explanations:
-- **Data leakage**: GeoClip was trained on MP-16 (16M geotagged Flickr images). The MMlandmarks
-  paper itself notes "over 1.2M MP-16 images were taken in the US, increasing the chances of
-  overlap" with MMlandmarks. Many query landmarks may have near-duplicates in the training set.
-- **Evaluation setup**: The MML paper evaluates on all 18,689 ground images (not 1 per landmark),
-  and may use a different gallery construction.
-- **Indoor filtering**: The MML paper filters images with LLaVA-1.5-7b-hf (Section 3.3), keeping
-  only outdoor images (274,650 outdoor vs 54,699 indoor, ~83%). They prompted LLaVA to categorize
-  every image as indoor or outdoor. We do not apply this filter — ~8% of our query images may be
-  indoor/zoomed with no geographic context, disproportionately hurting fine-grained accuracy.
+For fine-tuning experiments, compare improvements against the **6.67% / 28.79% index
+baseline**, not the 21.35% paper number. The paper gallery's query leakage makes it
+hard to beat by model changes alone — any meaningful progress lives on top of the
+honest gallery.
 
-**Bottom line:** Our zero-shot baseline is consistent with GeoClip's published performance.
-The gap vs the MMlandmarks paper's GeoClip number is likely inflated by data overlap and
-evaluation differences, not a deficiency in our setup.
+#### Phase 1b — Notes on earlier speculation (all debunked)
 
-#### Phase 1b — Zero-Shot Improvements (next step)
+The following ideas were entertained before we understood the gallery protocol and are
+**no longer relevant**; kept here only as a paper trail.
 
-Improvements to the zero-shot baseline, no training required:
-
-**1. Multi-image aggregation** (highest expected impact)
-Instead of using 1 image per landmark, embed all available ground images per query landmark
-and mean-pool their embeddings before gallery lookup. The MML paper uses all 18,689 images.
-
-**2. TenCrop augmentation** (medium impact — used in GeoClip paper)
-The GeoClip paper (Section 4) uses TenCrop at evaluation: 5 crops of the image + their
-horizontal flips, predictions averaged. This boosts fine-grained accuracy without training.
-
-**3. Extended gallery** (medium impact at fine-grained thresholds)
-Add `data/MML_Data/index/mml_index_satellite.csv` (101,302 GPS points) to the gallery,
-giving 118,859 total points. Denser coverage reduces the distance to the nearest gallery point.
-GeoClip paper uses 100K gallery points; our current 17,557 is substantially smaller.
-
-**4. Indoor filtering** (lower priority — complex)
-The MML paper uses LLaVA-1.5-7b-hf to filter indoor images. We could use a simpler
-heuristic or skip entirely and document as a known limitation (~8% noisy queries).
+- ~~Multi-image aggregation~~ — paper already scores each of 18,688 images independently
+  against its landmark GT, no pooling. We do the same.
+- ~~TenCrop at eval~~ — confirmed by the first author that no test-time augmentation is
+  applied.
+- ~~LLaVA indoor/outdoor filtering at eval~~ — training-set only; query set is unchanged
+  (Sec 3.3 + author confirmation).
+- ~~Extended gallery beyond 101k~~ — the paper uses exactly 101k (index+query); going
+  wider is just a different experiment, not a "fix".
+- ~~img_val_transform (ImageNet mean/std)~~ — tested on HPC and was strictly worse than
+  `preprocess_image` (CLIP mean/std). Shipped GeoCLIP weights expect CLIP normalization;
+  the `geoclip.train.dataloader` path is misleading dead code.
 
 #### Phase 2 — MMCLIP-style Multimodal Training (future)
 
@@ -247,9 +239,11 @@ k km of ground truth.
 - **200 km (regional)** — state/region level
 - **750 km (country)** — cross-continental US
 
-**Gallery choice for evaluation:**
-- Phase 1 default: 17,557 train GPS points (closed-world)
-- Ablation: add 101,302 index GPS points (open-world variant)
+**Gallery choice for evaluation** (via `gallery.source` in [configs/geoclip_baseline.yaml](../../../configs/geoclip_baseline.yaml)):
+- `"paper"` — 100,539 (index + query landmarks) → reproduces MML paper's 21.35% @1km. Upper bound.
+- `"index"` — 99,539 (index only) → honest in-the-wild 6.67% @1km.
+- `"train"` — 17,557 train landmarks → cluster-luck ablation, 19.22% @1km.
+- `"both"` — ~118k (train + index) → not a canonical protocol.
 
 ---
 

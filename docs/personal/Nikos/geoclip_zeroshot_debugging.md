@@ -1,5 +1,13 @@
 # Session summary — zero-shot GeoCLIP debugging
 
+## ✅ Resolution (closed)
+
+The gap was a **gallery definition mismatch**, not a code bug. The camera-ready MML paper Sec 5.2 uses `index ∪ query_landmarks` (100,539 GPS) — the query landmarks' GT coordinates are in the gallery itself. Once we added `source: "paper"` to `load_gallery_coords`, we reproduced the paper's Table 3 row to within 0.02 points (**21.35 / 36.44 / 48.61 / 71.41 / 91.52**). The arXiv Dec 2025 cut said "100k from satellite index set" which is what tripped us up; the camera-ready says "combined satellite index and query sets, 101k". First author Oskar Kristoffersen confirmed this and frames the two numbers as *"21 % is a geolocalization upper limit, 6.67 % is more realistic in the wild"*. See [docs/team/geoclip.md](../../team/geoclip.md) for current headline numbers.
+
+Everything below is the **investigation paper trail** kept for reference — the "unresolved 14-point gap" narrative is out of date.
+
+---
+
 ## Context
 
 We spent an extended session trying to reproduce the MMLandmarks paper's **21.37 %** @1 km on the zero-shot GeoCLIP baseline. Our current run on the paper's gallery (100k `mml_index_satellite.csv`, index-only) stands at **6.67 %** @1 km. This document summarizes everything we verified, everything we changed, and what's still open.
