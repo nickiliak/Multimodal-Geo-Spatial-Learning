@@ -7,7 +7,7 @@
 #BSUB -R "rusage[mem=4GB]"
 #BSUB -M 5GB
 #BSUB -gpu "num=1:mode=exclusive_process"
-#BSUB -W 4:00
+#BSUB -W 24:00
 #BSUB -o Output_%J.out
 #BSUB -e Output_%J.err
 

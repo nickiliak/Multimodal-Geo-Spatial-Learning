@@ -4,7 +4,7 @@ data:
   root: "data/MML_Data"
 
 gallery:
-  include_index: false  # set true for ablation with 101K index GPS
+  source: paper      # "train" (17k) | "index" (100k, honest in-the-wild) | "paper" (101k, index+query, reproduces paper's 21.37%) | "both" (118k)
 
 inference:
   batch_size: 64

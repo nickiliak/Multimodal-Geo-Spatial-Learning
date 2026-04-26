@@ -27,11 +27,16 @@ image. We start from the authors' pretrained weights — zero-shot is the curren
 
 ## Evaluation protocol
 
-- **Gallery:** 17,557 train-landmark GPS points from `train/mml_train.csv`. Toggling
-  `gallery.include_index: true` extends it with 101,302 index-satellite points
-  (118,859 total).
+- **Gallery:** configurable via `gallery.source`:
+  - `"paper"` (default) — 100,539 GPS = 99,539 index-satellite + 1,000 query-landmark
+    coords. **Matches the camera-ready MML paper Sec 5.2** ("combined satellite index
+    and query sets, 101k"). Reproduces their 21.37 % @1 km. Because every query's GT
+    GPS is *in* the gallery, this is an **upper bound**, not an in-the-wild number.
+  - `"index"` — 99,539 index-satellite only, honest in-the-wild gallery (~6.67 %).
+  - `"train"` — 17,557 train-landmark GPS (cluster-luck ablation).
+  - `"both"` — train + index (~118k).
 - **Queries:** all 18,688 query ground images (multiple images per landmark, each scored
-  against the landmark's ground-truth GPS).
+  against the landmark's ground-truth GPS). Matches paper Sec 5.2 exactly.
 - **Metric:** Haversine distance → Accuracy @ {1, 25, 200, 750, 2500} km + median / mean
   error in km.
 - **Params:** 438M total, 10.4M trainable (linear image head + full location encoder);
@@ -39,8 +44,42 @@ image. We start from the authors' pretrained weights — zero-shot is the curren
 
 ## Zero-shot benchmark
 
-Run on a V100 against the 17,557-point gallery
-(source: [Output_28246313.out](../../Output_28246313.out)):
+V100, off-the-shelf `geoclip` PyPI weights, `gallery.source: "paper"` — **reproduces
+the MML paper's 21.37 / 36.44 row** within rounding:
+
+| Threshold (km) | Accuracy (%) | Paper (Table 3) |
+|---:|---:|---:|
+| 1    | 21.35 | 21.37 |
+| 25   | 36.44 | 36.44 |
+| 200  | 48.61 | 48.57 |
+| 750  | 71.41 | 71.45 |
+| 2500 | 91.52 | 91.50 |
+
+### Why 21 % is an upper bound, not a realistic number
+
+The paper's gallery is `index ∪ query_landmarks`. Since we evaluate on the exact same
+query landmarks, every query's ground-truth GPS is already in the gallery — the model
+just has to retrieve the right one out of 100,539. Per Oskar (first author): *"6.67 %
+is a more realistic result of what could be achievable for geolocalization in the wild,
+and 21 % is then a geolocalization upper limit."*
+
+### Honest in-the-wild result — `gallery.source: "index"`
+
+Same model, gallery stripped to the 99,539 index-satellite coords only (query GT
+removed):
+
+| Threshold (km) | Accuracy (%) |
+|---:|---:|
+| 1    |  6.67 |
+| 25   | 28.79 |
+| 200  | 44.48 |
+| 750  | 69.07 |
+| 2500 | 91.07 |
+
+This is the number to reference when talking about "how well does off-the-shelf GeoCLIP
+actually localize US landmarks". Anything above this is gallery leakage.
+
+### Ablation — train-landmark gallery (17,557 points)
 
 | Threshold (km) | Accuracy (%) |
 |---:|---:|
@@ -50,34 +89,25 @@ Run on a V100 against the 17,557-point gallery
 | 750  | 71.26 |
 | 2500 | 91.33 |
 
-Median error 249.3 km · Mean error 686.1 km · ~7.5 min GPU inference.
+Inflated by cluster-luck — train landmarks cluster tightly in tourist cities where
+query landmarks also live, so the nearest train-landmark GPS is often coincidentally
+<1 km from a query. Keep this around as an ablation, not a headline.
 
-### Paper contrast
-
-| Method | Dataset | Gallery | @1 km | @25 km | @200 km | @750 km | @2500 km |
-|---|---|---:|---:|---:|---:|---:|---:|
-| GeoClip (own paper) | Im2GPS3k (global) | 100K | 14.11 | 34.47 | 50.65 | 69.67 | 83.82 |
-| Off-shelf GeoClip (MML paper) | MMlandmarks (US) | 17,557 | 21.37 | 36.44 | 48.57 | 71.45 | 91.50 |
-| **Ours (zero-shot)** | MMlandmarks (US) | 17,557 | **19.22** | **34.56** | **46.84** | **71.26** | **91.33** |
-
-We beat the GeoClip paper's own Im2GPS3k number because the US-only task is easier and
-the MP-16 training set overlaps with US landmarks. Against the MML paper row — same
-dataset, same gallery — we sit ~2 points lower at 1 km. The most plausible explanations
-are evaluation add-ons we don't apply: TenCrop augmentation at test time and LLaVA-based
-indoor-image filtering.
-
-## Fine-tuning — status: not yet beating zero-shot
+## Fine-tuning — needs re-run against new baseline
 
 Training is wired end-to-end in [scripts/geoclip_train.py](../../scripts/geoclip_train.py):
 symmetric InfoNCE with the pretrained `logit_scale`, Adam `lr=1e-4`, batch size 32,
 10-epoch target. After each epoch we re-embed the gallery and evaluate on the full query
-set; a checkpoint is written **only** when Acc@25km improves over the zero-shot baseline
-(34.56%).
+set; a checkpoint is written only when Acc@25km improves over the zero-shot baseline.
 
-First run on V100: epoch 1 Acc@1km **12.97%** (regressed from zero-shot's 19.22%),
-epoch 2 partially recovered to **15.10%**, then the job hit the 4-hour LSF wall-clock
-limit mid-epoch-3. No epoch cleared the Acc@25km gate, so no checkpoint was saved — the
-"fine-tuned" notebook still shows `_TBD_`. Work in progress.
+With `gallery.source: "paper"` the zero-shot Acc@25km gate is **36.44 %**, which is an
+upper bound and hard to beat by fine-tuning alone. For meaningful progress it makes more
+sense to run fine-tuning against `gallery.source: "index"` (honest 28.79 % baseline) and
+report improvement there. Work in progress.
+
+Historical run on V100 (stale — pre-refactor baseline): epoch 1 Acc@1km 12.97 %,
+epoch 2 15.10 %, then the job hit the 4-hour LSF wall-clock limit mid-epoch-3.
+No epoch cleared the gate. Needs a fresh run after this refactor.
 
 ## How to run
 

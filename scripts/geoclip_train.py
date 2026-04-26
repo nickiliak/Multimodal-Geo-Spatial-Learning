@@ -41,9 +41,7 @@ def main() -> None:
     print(f"Total parameters: {total_params:,}")
     print(f"Trainable parameters: {trainable_params:,}")
 
-    gallery_coords = load_gallery_coords(
-        data_root, include_index=cfg["gallery"]["include_index"]
-    )
+    gallery_coords = load_gallery_coords(data_root, source=cfg["gallery"]["source"])
     print(f"Gallery size: {len(gallery_coords):,} GPS points")
     print(f"Lat range: [{gallery_coords[:, 0].min():.2f}, {gallery_coords[:, 0].max():.2f}]")
     print(f"Lon range: [{gallery_coords[:, 1].min():.2f}, {gallery_coords[:, 1].max():.2f}]")
@@ -91,7 +89,7 @@ def main() -> None:
         shuffle=True,
         num_workers=num_workers,
         pin_memory=torch.cuda.is_available(),
-        drop_last=False,
+        drop_last=True,
     )
 
     trainer = L.Trainer(
@@ -105,13 +103,21 @@ def main() -> None:
     )
     trainer.fit(lit, train_dataloaders=train_loader)
 
-    if checkpoint_path.exists():
-        baseline.model.load_state_dict(torch.load(checkpoint_path, map_location=device))
+    last_path = checkpoint_path.with_name(
+        "last_" + checkpoint_path.name.removeprefix("best_")
+    )
+    load_path = (
+        checkpoint_path if checkpoint_path.exists()
+        else (last_path if last_path.exists() else None)
+    )
+    if load_path is not None:
+        baseline.model.load_state_dict(torch.load(load_path, map_location=device))
         baseline.build_gallery(gallery_coords)
         final = lit.evaluate_on_query()
-        print_metrics("final (best checkpoint)", final)
+        tag = "best" if load_path == checkpoint_path else "last"
+        print_metrics(f"final ({tag} checkpoint)", final)
     else:
-        print("\nNo checkpoint beat zero-shot; skipping final load.")
+        print("\nNo checkpoint on disk; skipping final load.")
 
 
 if __name__ == "__main__":
