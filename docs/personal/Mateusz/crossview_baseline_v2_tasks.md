@@ -14,12 +14,13 @@ This baseline serves as the **image-only comparison point** in the final project
 |-------|----------|----------|---------|---------|---------|-----------|---------|
 | v1 | ConvNeXt-Tiny | MMLandmarks train | 9.73% | 27.11% | 37.62% | — | pooled, query-only gallery |
 | **v2 (pooled)** | **ConvNeXt-Base** | **MMLandmarks train** | **17.60%** | **46.66%** | **60.96%** | **25.50%** | pooled — NOT paper-comparable |
-| **v2 (unpooled)** | **ConvNeXt-Base** | **MMLandmarks train** | **TBD** | — | — | — | **unpooled — paper-comparable** |
-| ConvNeXt-Base zero-shot | ConvNeXt-Base | ImageNet-22k only | TBD | — | — | — | unpooled, no MMLandmarks training |
+| **v2 (unpooled)** | **ConvNeXt-Base** | **MMLandmarks train** | **7.21%** | **18.52%** | **25.31%** | **13.10%** | **unpooled — paper-comparable** |
+| ConvNeXt-Base zero-shot | ConvNeXt-Base | ImageNet-22k only | 0.25% | 0.76% | 1.13% | 0.59% | unpooled, no MMLandmarks training |
 | MMCLIP (paper) | CLIP ViT-L | **zero-shot** | 20.5% | — | — | — | unpooled |
 | GeoClip (paper) | CLIP ViT-L | **zero-shot** | 21.1% | — | — | — | unpooled |
 
-> **Critical note:** MMCLIP and GeoClip numbers are **zero-shot** — those models never trained on MMLandmarks data. Our v2 model DID train on MMLandmarks. See Section 6 (pooling) and Section 9 (zero-shot distinction).
+> **Critical note:** MMCLIP and GeoClip numbers are **zero-shot** — those models never trained on MMLandmarks data. Our v2 model DID train on MMLandmarks. See Section 6 (pooling) and Section 9 (zero-shot distinction).  
+> **Best checkpoint:** epoch 30 (training peaked at ep30; ep33 was marginally lower). All v2 numbers above are from `cv_v2_base_20260422_230539/best.pt`.
 
 ---
 
@@ -76,10 +77,10 @@ Negatives are selected based on embedding similarity (i.e., the hardest in featu
 > The model is **not zero-shot** — it fine-tunes on MMLandmarks training data. MMCLIP and GeoClip in Table 2 of the paper are zero-shot. See Section 9 for the comparison implications.
 
 ### Checkpoints
-| Run dir | Best epoch | g2s R@1 (pooled) | Notes |
-|---------|-----------|-----------------|-------|
-| `checkpoints/crossview/cv_v2_base_20260420_120027/` | 19 | ~7% | wall-time killed at epoch 22 |
-| `checkpoints/crossview/cv_v2_base_20260422_230539/` | 35 | **17.60%** | full 35-epoch run (resumed from above) |
+| Run dir | Best epoch | g2s R@1 (pooled) | g2s R@1 (unpooled) | Notes |
+|---------|-----------|-----------------|-------------------|-------|
+| `checkpoints/crossview/cv_v2_base_20260420_120027/` | 19 | ~7% | — | wall-time killed at epoch 22 |
+| `checkpoints/crossview/cv_v2_base_20260422_230539/` | **30** | **17.60%** | **7.21%** | full 35-epoch run (resumed from above); training peaked at ep30 |
 
 ---
 
@@ -202,28 +203,31 @@ These are different evaluation conditions and should be presented separately in 
 
 **Zero-shot methods (no MMLandmarks training):**
 
-| Method | Backbone | g2s R@1 (unpooled) | Notes |
-|--------|----------|--------------------|-------|
-| ConvNeXt-Base zero-shot | ConvNeXt-Base 88M | TBD (job pending) | ImageNet-22k only |
-| MMCLIP | CLIP ViT-L ~300M | 20.5% | from MMLandmarks Table 2 |
-| GeoClip | CLIP ViT-L ~300M | 21.1% | CLIP + geo-contrastive pretraining |
+| Method | Backbone | g2s R@1 | g2s R@5 | g2s R@10 | g2s mAP@1k | Notes |
+|--------|----------|---------|---------|---------|-----------|-------|
+| ConvNeXt-Base zero-shot | ConvNeXt-Base 88M | 0.25% | 0.76% | 1.13% | 0.59% | ImageNet-22k only |
+| MMCLIP | CLIP ViT-L ~300M | 20.5% | — | — | — | from MMLandmarks Table 2 |
+| GeoClip | CLIP ViT-L ~300M | 21.1% | — | — | — | CLIP + geo-contrastive pretraining |
 
-**Trained on MMLandmarks (our work):**
+**Trained on MMLandmarks (our work, unpooled, paper-comparable):**
 
-| Method | Backbone | g2s R@1 (unpooled) | g2s R@1 (pooled) | Notes |
-|--------|----------|--------------------|-----------------|-------|
-| v1 | ConvNeXt-Tiny | — | 9.73% | old gallery, not paper-comparable |
-| **v2** | **ConvNeXt-Base 88M** | **TBD (job pending)** | **17.60%** | 35 epochs, GPS+DSS |
+| Method | Backbone | g2s R@1 | g2s R@5 | g2s R@10 | g2s mAP@1k | Notes |
+|--------|----------|---------|---------|---------|-----------|-------|
+| v1 | ConvNeXt-Tiny | — | — | — | — | pooled, old gallery — not paper-comparable |
+| **v2 (ep30)** | **ConvNeXt-Base 88M** | **7.21%** | **18.52%** | **25.31%** | **13.10%** | 35 epochs, GPS+DSS |
 
 **Sample4Geo (reference, different dataset):**  
 ~27% on CVUSA/CVACT — not directly comparable (different dataset, different protocol).
 
 ### Key takeaway for the report
 
-MMCLIP and GeoClip use CLIP ViT-L (~300M params) pretrained on hundreds of millions of image-text pairs including geo-tagged images — and they score 20–21% *without any MMLandmarks training*. Our model uses ConvNeXt-Base (88M params) trained from ImageNet-22k and fine-tuned on MMLandmarks alone. If our unpooled number lands in the 10–14% range, it shows:
-1. MMLandmarks domain training meaningfully helps ConvNeXt-Base (zero-shot → trained delta)
-2. CLIP's general visual pretraining is powerful even without task-specific training
-3. A CLIP-initialized backbone fine-tuned on MMLandmarks would likely outperform both
+The zero-shot ConvNeXt-Base scores 0.25% g2s R@1. After fine-tuning on MMLandmarks, the same backbone reaches 7.21% — a **29× improvement** from domain training alone. Despite this, CLIP-based zero-shot methods still outperform our trained model (20.5% vs 7.21%), because CLIP ViT-L was pretrained on orders of magnitude more data including geo-tagged imagery.
+
+This sets up a clear narrative: cross-view retrieval strongly benefits from domain-specific training, but the backbone and pretraining matter enormously. A CLIP-initialized backbone fine-tuned on MMLandmarks would likely close most of this gap — and that is what GeoClip and multimodal methods pursue.
+
+**s2g results (our v2, trained, unpooled):**
+- R@1: 5.20% | R@5: 14.40% | R@10: 18.70% | mAP@1k: 2.66%  
+  (s2g is harder because the ground gallery is 733,242 images vs 100,539 for g2s)
 
 ---
 
@@ -254,10 +258,11 @@ MMCLIP and GeoClip use CLIP ViT-L (~300M params) pretrained on hundreds of milli
 - **No text/tag modality:** this is a pure image-image baseline. Other team members are exploring text+image and GPS-aware models.
 - **224px resolution:** 256px exceeded GPU memory at batch=64. Gradient checkpointing or mixed precision could unlock higher resolution in a future run.
 
-### Immediate next steps
-1. Run **unpooled eval** (trained model, paper-comparable): `bsub < scripts/eval_crossview.sh`
-2. Run **zero-shot eval** (pretrained only, no MMLandmarks training): `bsub < scripts/eval_crossview_zeroshot.sh`
-3. Fill in the TBD rows in the results table above once both jobs complete.
+### Eval jobs — completed ✓
+- **Unpooled trained eval** (job 28291418): g2s R@1=7.21%, mAP@1k=13.10% — results in `logs/eval_nopooled_20260426_025336.json`
+- **Zero-shot eval** (job 28291442): g2s R@1=0.25%, mAP@1k=0.59% — results in `logs/eval_zeroshot_20260426_025656.json`
+
+All TBD rows in the tables above have been filled in. The baseline is fully evaluated.
 
 ### Task 7 — Report integration
 For the final report, the baseline section should clearly state:
