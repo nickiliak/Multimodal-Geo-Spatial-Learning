@@ -407,6 +407,7 @@ def _run_eval(
     img_size: int,
     device: torch.device,
     cfg: dict,
+    pool_queries: bool = True,
 ) -> dict[str, dict[str, float]]:
     """Run benchmark-style cross-view retrieval evaluation.
 
@@ -467,6 +468,7 @@ def _run_eval(
         results["g2s"] = evaluate_crossview(
             model, q_loader, idx_loader, device,
             ks=ks, map_k=map_k, direction="g2s",
+            pool_queries=pool_queries,
         )
 
     if "s2g" in directions:
@@ -475,6 +477,7 @@ def _run_eval(
         results["s2g"] = evaluate_crossview(
             model, q_loader, idx_loader, device,
             ks=ks, map_k=map_k, direction="s2g",
+            pool_queries=pool_queries,
         )
 
     return results
