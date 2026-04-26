@@ -1,459 +1,272 @@
-# Cross-View Baseline v1 -> v2 Tasks
+# Cross-View Retrieval Baseline — v1 & v2 Documentation
 
-## Purpose
-This note documents the current state of the **Sample4Geo-like cross-view baseline on MMLandmarks**, what was originally intended when implementing it, what was actually achieved in baseline v1, and what should be done next in baseline v2.
+## 1. What this is
 
-It is written for:
-- teammates working on other project directions,
-- later report writing,
-- future continuation by me,
-- possible AI-agent support.
+This document describes the **image-only cross-view retrieval baseline** built on MMLandmarks. The method is inspired by [Sample4Geo](https://arxiv.org/abs/2303.11913): a shared ConvNeXt encoder trained with symmetric InfoNCE loss to match ground-level photos to satellite imagery and vice versa.
+
+This baseline serves as the **image-only comparison point** in the final project report, against which multimodal approaches (GeoClip, text+image methods) will be measured.
 
 ---
 
-# 1. Baseline v1 summary
+## 2. Quick results summary
 
-## Goal of v1
-The goal of baseline v1 was to build a **working image-image cross-view retrieval baseline** for MMLandmarks, inspired by Sample4Geo:
-- shared encoder for ground and satellite images,
-- contrastive training with symmetric InfoNCE,
-- landmark-level pairing instead of fixed one-to-one image pairing,
-- simple retrieval evaluation to verify that the pipeline learns.
+| Model | Backbone | Training | g2s R@1 | g2s R@5 | g2s R@10 | g2s mAP@1k | Protocol |
+|-------|----------|----------|---------|---------|---------|-----------|---------|
+| v1 | ConvNeXt-Tiny | MMLandmarks train | 9.73% | 27.11% | 37.62% | — | pooled, query-only gallery |
+| **v2 (pooled)** | **ConvNeXt-Base** | **MMLandmarks train** | **17.60%** | **46.66%** | **60.96%** | **25.50%** | pooled — NOT paper-comparable |
+| **v2 (unpooled)** | **ConvNeXt-Base** | **MMLandmarks train** | **TBD** | — | — | — | **unpooled — paper-comparable** |
+| ConvNeXt-Base zero-shot | ConvNeXt-Base | ImageNet-22k only | TBD | — | — | — | unpooled, no MMLandmarks training |
+| MMCLIP (paper) | CLIP ViT-L | **zero-shot** | 20.5% | — | — | — | unpooled |
+| GeoClip (paper) | CLIP ViT-L | **zero-shot** | 21.1% | — | — | — | unpooled |
 
-The intention was **not yet** to reproduce the full final benchmark protocol perfectly, but to first get a clean, trainable, inspectable baseline running end-to-end.
-
-## What was implemented
-Baseline v1 currently contains:
-- **Shared-weight ConvNeXt encoder** (`CrossViewModel`)
-- **Symmetric InfoNCE loss** with learnable temperature
-- **MMLandmarks landmark-based training pairs**: one ground + one satellite image sampled from the same landmark
-- **UniqueLandmarkSampler** to avoid duplicate landmark IDs inside one batch
-- **Recall@1 / Recall@5 / Recall@10 evaluation**
-- Basic training diagnostics:
-  - train loss
-  - diagonal similarity
-  - off-diagonal similarity
-  - similarity margin
-  - batch accuracy
-  - temperature
-
-## Important design decision in v1
-Because MMLandmarks has **multiple ground images and multiple satellite images per landmark**, training was adapted to the landmark identity level.
-
-This means a training sample is **not** one permanently fixed image pair.
-Instead, for landmark `L`, each epoch may sample:
-- one random ground image from `L`
-- one random satellite image from `L`
-
-This was intentional and is the right direction for MMLandmarks.
+> **Critical note:** MMCLIP and GeoClip numbers are **zero-shot** — those models never trained on MMLandmarks data. Our v2 model DID train on MMLandmarks. See Section 6 (pooling) and Section 9 (zero-shot distinction).
 
 ---
 
-# 2. What v1 did well
+## 3. Architecture
 
-## 2.1 The pipeline works end-to-end
-The model trains successfully, runs on HPC, evaluates during training, and saves checkpoints.
+### Shared encoder (`CrossViewModel`)
+- **Backbone:** `convnext_base.fb_in22k` via [timm](https://github.com/huggingface/pytorch-image-models) — 88M parameters, pretrained on ImageNet-22k
+- **Weight sharing:** the same encoder is used for both ground and satellite images (no separate tower)
+- **Projection head:** optional linear projection to a target `embed_dim`; in v2 `embed_dim=0` keeps the native 1024-dim features
+- **Output:** L2-normalized embeddings per image
 
-## 2.2 The model is actually learning
-Training did not collapse. The metrics improved steadily across the run.
-
-### Final baseline v1 result (from `baseline_v1_final.out`)
-Best observed result:
-- **Recall@1 = 0.0973 (9.73%)**
-- **Recall@5 = 0.2711 (27.11%)**
-- **Recall@10 = 0.3762 (37.62%)**
-
-### Training trend
-Compared with early epochs, the run showed:
-- lower loss,
-- higher batch accuracy,
-- larger diagonal-vs-offdiagonal similarity margin,
-- better retrieval scores.
-
-So v1 is a valid starting baseline, not a broken experiment.
-
-## 2.3 The training logic matches MMLandmarks better than fixed-pair logic
-The current design already respects the fact that MMLandmarks is **instance-based**.
-That is an important adaptation relative to simpler one-pair-per-location thinking.
+### Loss
+- **Symmetric InfoNCE** with a learnable (log-space) temperature parameter
+- Initialized at `τ = 0.07`, learned end-to-end during training
+- Label smoothing: none (0.0) — found not to help in v2
 
 ---
 
-# 3. What v1 does NOT yet match well enough
+## 4. Training setup (v2)
 
-This section is the most important one for baseline v2.
+Config file: `configs/crossview_convnext_base.yaml`
 
-## 3.1 Evaluation protocol is currently too simplified
-### Current state
-Evaluation currently does:
-- **query = ground images from the `query` split**
-- **index = satellite images from the `query` split**
+| Setting | Value | Notes |
+|---------|-------|-------|
+| Backbone | `convnext_base.fb_in22k` | 88M params |
+| Image size | 224 px | 256 px caused OOM on 32GB V100 |
+| Batch size | 64 | per GPU |
+| Epochs | 35 | |
+| Learning rate | 1e-4 | AdamW |
+| Weight decay | 1e-4 | |
+| LR schedule | Cosine with warmup | 3 warmup epochs from 0.1× LR, min LR = 1% |
+| Hard negatives | GPS → DSS | see below |
+| Eval frequency | Every 3 epochs | |
+| Eval batch size | 384 | inference-only, fits 32GB easily |
+| GPU | V100 32GB | `select[gpu32gb]` in LSF |
+| Wall time used | ~8.5 hours | training + eval |
 
-So retrieval is currently **query ground -> query satellite**.
+### Hard-negative sampling (Sample4Geo-style)
 
-### Original intention
-The intention was to have a quick and simple retrieval check during training, so that we could confirm the model learns before implementing the full benchmark protocol.
+Training uses a two-phase sampling strategy:
 
-### Problem
-This is **not yet the same as the proper benchmark-style retrieval setup**.
-The papers and the MMLandmarks benchmark logic expect retrieval against a larger and proper **index/gallery split**, not only against the satellite images from `query`.
+**Phase 1 — GPS-based negatives (epochs 1–4)**  
+Negatives are selected from geographically nearby landmarks. This forces the model to learn fine-grained visual differences between nearby locations rather than trivially separating distant ones.
 
-### Consequence
-The current v1 numbers are useful for:
-- debugging,
-- tracking learning progress,
-- comparing small internal changes.
+**Phase 2 — Dynamic Similarity Sampling / DSS (epochs 5–35)**  
+Negatives are selected based on embedding similarity (i.e., the hardest in feature space). The embedding index is refreshed every epoch. This is the core Sample4Geo technique and is what drives metric gains after the initial GPS warmup.
 
-But they should **not yet** be treated as directly benchmark-comparable paper numbers.
+### Training data
+- **Split used:** dedicated `train` split — 17,557 landmarks with ground + satellite images (separate from the `query`/`index` eval splits)
+- **Ground images:** one random ground image sampled per landmark per iteration
+- **Satellite images:** one random satellite image sampled per landmark per iteration
+- **UniqueLandmarkSampler** ensures no duplicate landmark IDs within one batch
 
----
+> The model is **not zero-shot** — it fine-tunes on MMLandmarks training data. MMCLIP and GeoClip in Table 2 of the paper are zero-shot. See Section 9 for the comparison implications.
 
-## 3.2 Metrics are incomplete for MMLandmarks-style benchmarking
-### Current state
-v1 reports only:
-- Recall@1
-- Recall@5
-- Recall@10
-
-### Original intention
-The intention was to follow the common retrieval practice used in cross-view papers like Sample4Geo and keep evaluation simple at first.
-
-### Problem
-For an instance-level benchmark like MMLandmarks, this is incomplete.
-A stronger and more paper-aligned setup should also report **mAP@1k**.
-
-### Consequence
-Right now, the baseline captures whether the correct landmark appears near the top, but does **not** fully describe ranking quality across many valid positives.
+### Checkpoints
+| Run dir | Best epoch | g2s R@1 (pooled) | Notes |
+|---------|-----------|-----------------|-------|
+| `checkpoints/crossview/cv_v2_base_20260420_120027/` | 19 | ~7% | wall-time killed at epoch 22 |
+| `checkpoints/crossview/cv_v2_base_20260422_230539/` | 35 | **17.60%** | full 35-epoch run (resumed from above) |
 
 ---
 
-## 3.3 The code claims Sample4Geo-style hard-negative logic, but v1 is mostly the simpler version
-### Current state
-The training file says the baseline implements:
-1. GPS-based hard negative sampling (early)
-2. Dynamic Similarity Sampling (later)
+## 5. Evaluation setup
 
-But in practice, the visible implemented pipeline is still centered around:
-- random landmark sampling,
-- unique landmarks per batch,
-- standard symmetric InfoNCE.
+### Gallery composition
+Evaluation uses the **full index + query satellite gallery** for ground-to-satellite retrieval (g2s), matching the MMLandmarks benchmark protocol:
 
-### Original intention
-The intention was to make the implementation evolve toward the full Sample4Geo-style pipeline.
+| Direction | Queries | Gallery |
+|-----------|---------|---------|
+| g2s (ground → satellite) | 18,688 ground images (1,000 landmarks) | 1,000 query-sat + 99,539 index-sat = **100,539 images** |
+| s2g (satellite → ground) | 1,000 satellite images | 18,688 query-ground + 714,554 index-ground = **733,242 images** |
 
-### Problem
-As of v1, this looks more like a **Sample4Geo-inspired baseline** than a full hard-negative mining implementation.
+Retrieval is by cosine similarity of L2-normalized embeddings. A retrieved item is **relevant** if it shares the same `landmark_id` as the query.
 
-### Consequence
-Methodologically, v1 can be described as:
-- **aligned with the main Sample4Geo direction**,
-- but **not yet a full reproduction of its sampling strategy**.
+### Metrics
+- **Recall@K** (K = 1, 5, 10): fraction of queries with at least one correct match in the top-K results
+- **mAP@1000**: mean Average Precision truncated at rank 1000
 
 ---
 
-## 3.4 Training still uses one sampled positive pair per landmark per batch
-### Current state
-For each landmark in a batch, we currently sample:
-- one ground image,
-- one satellite image,
-- and treat this as the positive pair.
+## 6. Pooled vs unpooled evaluation — important distinction
 
-### Original intention
-This was done because it keeps training simple and compatible with standard diagonal InfoNCE.
+This is the most important protocol note for report writing.
 
-### Problem
-MMLandmarks contains **multiple valid positives per landmark**. v1 does not explicitly exploit multiple same-landmark positives in one loss computation.
+### What pooling means here
+Each of the 1,000 test landmarks has ~18 ground-level photos. "Pooling" means: before retrieval, all ground embeddings for the same landmark are **mean-pooled and L2-renormalized** into a single landmark embedding. This yields 1,000 query vectors instead of 18,688.
 
-### Consequence
-This is not wrong, but it is still a simplification of the full instance-level setting.
+### Why this matters
+- **Pooled:** 1,000 queries. Numbers are higher and arguably unfair — the model effectively sees a "consensus" view of the landmark.
+- **Unpooled:** 18,688 queries. Each ground photo is queried individually, including difficult/atypical images. This is harder and gives lower numbers.
 
----
+### What the MMLandmarks paper uses
+After checking with the paper authors (Oskar Ahlén, email April 2026): **Table 2 in the MMLandmarks paper uses unpooled evaluation** — each of the 18,689 ground images is a separate query. The numbers in Table 2 (MMCLIP 20.5%, GeoClip 21.1%) are unpooled.
 
-## 3.5 Backbone / setup is a practical baseline, not the strongest paper-style configuration
-### Current state
-v1 uses a smaller/faster setup intended to get working results quickly.
+Our v2 pooled R@1 = **17.60%** is therefore NOT directly comparable to Table 2. To get a fair comparison number, we need to run the standalone eval script with `--no-pool`.
 
-### Original intention
-Fast iteration first, stronger model later.
+### Unpooled eval (pending HPC job)
+The standalone eval script `src/mmgeo/crossview/eval.py` was built specifically for this. Submit:
+```bash
+bsub < scripts/eval_crossview.sh
+```
+This runs g2s and s2g with 18,689 individual query images (no pooling) and saves results to `logs/eval_nopooled_<timestamp>.json`.
 
-### Problem
-This means v1 is more of a **sanity-check baseline** than a final strong benchmark run.
-
-### Consequence
-If performance is lower than expected, it may partly be because the current setup is intentionally conservative.
+Expected unpooled g2s R@1: roughly **10–14%** (harder, but paper-comparable).
 
 ---
 
-# 4. What can and cannot be compared to papers
+## 7. Key files
 
-## 4.1 What v1 can be compared to
-### Sample4Geo
-v1 can be compared to Sample4Geo in terms of:
-- overall method idea,
-- shared encoder,
-- symmetric contrastive retrieval training,
-- the role of hard negatives as a missing next step.
-
-This is a **methodological comparison**, not a fair raw-score comparison.
-
-### MMLandmarks paper
-v1 can eventually be compared to the MMLandmarks paper **if** the evaluation protocol is aligned better.
-This is the most relevant benchmark source because it is:
-- the same dataset,
-- the same task family,
-- the same benchmark tables.
-
-## 4.2 What v1 should NOT be directly compared to
-The current v1 scores should **not** be directly compared numerically to:
-- Sample4Geo benchmark numbers,
-- GLDv2 numbers,
-- ILIAS numbers,
-- or any paper that uses a different dataset/protocol.
-
-Reason: the dataset, query/index setup, and the notion of positives are different.
+| File | Description |
+|------|-------------|
+| `configs/crossview_convnext_base.yaml` | Training config (backbone, img_size, LR, hard-neg settings) |
+| `src/mmgeo/crossview/model.py` | `CrossViewModel` — shared encoder + optional projection head |
+| `src/mmgeo/crossview/train.py` | Full training loop: GPS/DSS hard-neg, LR schedule, eval, checkpointing, `--resume` support |
+| `src/mmgeo/crossview/evaluate.py` | Eval utilities: `extract_embeddings`, `compute_retrieval_metrics`, `pool_embeddings_by_landmark`, `evaluate_crossview` |
+| `src/mmgeo/crossview/eval.py` | **Standalone eval script** — `--checkpoint` for trained eval, `--pretrained-only` for zero-shot, `--pool`/`--no-pool` |
+| `src/mmgeo/crossview/dataset.py` | `MMLImageDataset`, `get_eval_transforms` |
+| `scripts/run_crossview_convnext_base.sh` | LSF job script for training (with resume support) |
+| `scripts/eval_crossview.sh` | LSF job script for trained eval (`--no-pool`, paper-comparable) |
+| `scripts/eval_crossview_zeroshot.sh` | LSF job script for zero-shot eval (`--pretrained-only --no-pool`) |
 
 ---
 
-# 5. Baseline v2 tasks
+## 8. How to run
 
-This section lists the concrete next steps.
+### Train (or resume) on HPC
+```bash
+bsub < scripts/run_crossview_convnext_base.sh
+```
+Edit `RESUME` in the script to point to an existing checkpoint, or leave empty to start fresh.
 
----
+### Standalone eval on HPC (paper-comparable, no pooling)
+```bash
+bsub < scripts/eval_crossview.sh
+```
+Results are printed to the job log and saved as JSON in `logs/`.
 
-## Task 1 — Replace simplified evaluation with official query->index retrieval
+### Standalone eval locally (pooled, quick sanity check)
+```bash
+python -m mmgeo.crossview.eval \
+    --config configs/crossview_convnext_base.yaml \
+    --checkpoint checkpoints/crossview/cv_v2_base_20260422_230539/best.pt \
+    --pool
+```
 
-### What to do
-Change evaluation from:
-- `query ground -> query satellite`
+### Standalone eval locally (unpooled, paper-comparable)
+```bash
+python -m mmgeo.crossview.eval \
+    --config configs/crossview_convnext_base.yaml \
+    --checkpoint checkpoints/crossview/cv_v2_base_20260422_230539/best.pt \
+    --no-pool \
+    --output results/eval_nopooled.json
+```
 
-to proper benchmark-style retrieval using:
-- `query ground -> index satellite`
+### Zero-shot eval on HPC (ImageNet-22k weights only, no MMLandmarks training)
+```bash
+bsub < scripts/eval_crossview_zeroshot.sh
+```
 
-And ideally also the reverse direction:
-- `query satellite -> index ground`
-
-### Why
-This is the single most important step for making the baseline results closer to paper-style benchmarking.
-
-Without this change, the current numbers are only internal progress indicators.
-
-### How
-1. In `_run_eval`, stop building the retrieval index from `split="query"`.
-2. Use `MMLImageDataset(data_root, "index", modality, ...)` for the gallery side.
-3. Keep query images from `query`.
-4. Run:
-   - ground-to-satellite evaluation
-   - satellite-to-ground evaluation
-5. Store both result directions clearly.
-
-### Expected outcome
-- Results become much more meaningful.
-- We can compare much more honestly to MMLandmarks benchmark tables.
-
----
-
-## Task 2 — Add mAP@1k
-
-### What to do
-Extend evaluation to compute **mAP@1k** in addition to Recall@1/5/10.
-
-### Why
-MMLandmarks is instance-level and may have multiple relevant items for the same landmark.
-mAP@1k is therefore a better ranking metric and aligns better with paper reporting.
-
-### How
-1. Add a function similar to `compute_recall_at_k`, but computing average precision per query.
-2. Use the same relevance definition:
-   - retrieved item is relevant if it shares the same `landmark_id`.
-3. Restrict ranking evaluation to top-1000 retrieved items.
-4. Report:
-   - mAP@1k
-   - Recall@1
-   - Recall@5
-   - Recall@10
-
-### Expected outcome
-- Evaluation becomes closer to the MMLandmarks paper.
-- Retrieval quality is measured more completely.
+### Zero-shot eval locally
+```bash
+python -m mmgeo.crossview.eval \
+    --config configs/crossview_convnext_base.yaml \
+    --pretrained-only \
+    --no-pool \
+    --output results/eval_zeroshot.json
+```
 
 ---
 
-## Task 3 — Make the Sample4Geo-related hard-negative story true in code
+## 9. Comparison to related work
 
-### What to do
-Implement the missing parts needed to honestly describe the method as having Sample4Geo-style hard-negative logic.
+### Zero-shot vs trained — critical distinction for the report
 
-### Why
-Right now the training file/docstring promises more than the visible implementation fully delivers.
-That makes the method description stronger than the actual code.
+**Zero-shot** means the model has never seen MMLandmarks data. It uses its pretrained features directly for retrieval.  
+**Trained** means the model was fine-tuned on the MMLandmarks `train` split (17,557 landmarks).
 
-### How
-Two possible levels:
+These are different evaluation conditions and should be presented separately in the report.
 
-#### Option A — minimal honest fix
-If hard-negative mining is not implemented soon:
-- update comments/docstrings/readme to describe the method honestly as
-  **Sample4Geo-inspired shared-encoder InfoNCE baseline**.
+**Zero-shot methods (no MMLandmarks training):**
 
-#### Option B — actual implementation
-Implement:
-1. **GPS-based negative selection early in training**
-2. **Dynamic Similarity Sampling later in training**
+| Method | Backbone | g2s R@1 (unpooled) | Notes |
+|--------|----------|--------------------|-------|
+| ConvNeXt-Base zero-shot | ConvNeXt-Base 88M | TBD (job pending) | ImageNet-22k only |
+| MMCLIP | CLIP ViT-L ~300M | 20.5% | from MMLandmarks Table 2 |
+| GeoClip | CLIP ViT-L ~300M | 21.1% | CLIP + geo-contrastive pretraining |
 
-This likely requires:
-- precomputing or efficiently accessing coordinates,
-- building candidate hard-negative landmark sets,
-- refreshing similarity-based neighbors across epochs.
+**Trained on MMLandmarks (our work):**
 
-### Expected outcome
-- Better alignment between code and method description.
-- Potentially better retrieval performance.
+| Method | Backbone | g2s R@1 (unpooled) | g2s R@1 (pooled) | Notes |
+|--------|----------|--------------------|-----------------|-------|
+| v1 | ConvNeXt-Tiny | — | 9.73% | old gallery, not paper-comparable |
+| **v2** | **ConvNeXt-Base 88M** | **TBD (job pending)** | **17.60%** | 35 epochs, GPS+DSS |
 
----
+**Sample4Geo (reference, different dataset):**  
+~27% on CVUSA/CVACT — not directly comparable (different dataset, different protocol).
 
-## Task 4 — Add stronger evaluation logging and versioned experiment outputs
+### Key takeaway for the report
 
-### What to do
-Make experiment outputs easier to compare and easier to use later in the report.
-
-### Why
-Right now there is enough information to inspect one run, but it is still inconvenient for:
-- comparing versions,
-- writing the report later,
-- handing over to teammates.
-
-### How
-For each run, save:
-- config file copy,
-- final metrics JSON/YAML,
-- best metrics JSON/YAML,
-- checkpoint path,
-- training curves CSV,
-- short run summary markdown or text file.
-
-Suggested fields:
-- model backbone
-- image size
-- batch size
-- loss settings
-- evaluation split logic
-- metrics by epoch
-- best epoch
-- runtime
-
-### Expected outcome
-- Easier ablation tracking
-- Better report writing later
-- Less chance of forgetting what changed between runs
+MMCLIP and GeoClip use CLIP ViT-L (~300M params) pretrained on hundreds of millions of image-text pairs including geo-tagged images — and they score 20–21% *without any MMLandmarks training*. Our model uses ConvNeXt-Base (88M params) trained from ImageNet-22k and fine-tuned on MMLandmarks alone. If our unpooled number lands in the 10–14% range, it shows:
+1. MMLandmarks domain training meaningfully helps ConvNeXt-Base (zero-shot → trained delta)
+2. CLIP's general visual pretraining is powerful even without task-specific training
+3. A CLIP-initialized backbone fine-tuned on MMLandmarks would likely outperform both
 
 ---
 
-## Task 5 — Explore stronger training setups after evaluation is fixed
+## 10. v1 → v2 changes summary
 
-### What to do
-After fixing the protocol, run stronger but controlled experiments.
-
-### Why
-There is little value in scaling up if evaluation is still not benchmark-like.
-Once evaluation is fixed, stronger runs become more informative.
-
-### How
-Possible upgrades:
-1. Move from smaller backbone to stronger backbone
-2. Increase image resolution if memory allows
-3. Tune batch size / LR accordingly
-4. Compare shorter-fast vs stronger-slower setups
-
-### Expected outcome
-- Stronger baseline
-- More informative comparison point for multimodal methods later
+| Area | v1 | v2 |
+|------|----|----|
+| Backbone | ConvNeXt-Tiny | ConvNeXt-Base (88M params) |
+| Embed dim | 256 | 1024 (native) |
+| Image size | 224 px | 224 px |
+| Epochs | 20 | 35 |
+| Hard negatives | GPS only (partial) | GPS (4 ep) → DSS (31 ep) |
+| Gallery | query-only satellite | full index + query satellite (100,539 / 733,242) |
+| Metrics | R@1/5/10 | R@1/5/10 + mAP@1k |
+| Query pooling | none | optional (pool or no-pool) |
+| Eval speed | batch=128, every epoch | batch=384, every 3 epochs |
+| Resume support | none | `--resume` from any `.pt` |
+| Per-epoch checkpoint | only at end | `last.pt` saved after every epoch |
+| Experiment logging | basic | RunLogger: versioned run dirs, metrics CSV, config copy |
+| Best g2s R@1 | 9.73% | 17.60% (pooled) |
 
 ---
 
-## Task 6 — Consider whether to stay with single-positive InfoNCE or extend it
+## 11. Limitations and what's next (Task 7)
 
-### What to do
-Decide whether baseline v2 should remain a simple one-positive-per-landmark contrastive baseline, or whether it should explicitly use multiple positives per landmark.
+### Known limitations
+- **Single positive per batch step:** training uses one ground + one satellite image per landmark per iteration. MMLandmarks has ~18 ground images per landmark; we don't use all of them simultaneously in one loss computation (multi-positive InfoNCE). This is a valid simplification but not the maximum the data allows.
+- **No text/tag modality:** this is a pure image-image baseline. Other team members are exploring text+image and GPS-aware models.
+- **224px resolution:** 256px exceeded GPU memory at batch=64. Gradient checkpointing or mixed precision could unlock higher resolution in a future run.
 
-### Why
-The current approach is valid and simple, but MMLandmarks naturally supports multiple positives.
-This decision matters for how close the method should be to the instance-level nature of the dataset.
+### Immediate next steps
+1. Run **unpooled eval** (trained model, paper-comparable): `bsub < scripts/eval_crossview.sh`
+2. Run **zero-shot eval** (pretrained only, no MMLandmarks training): `bsub < scripts/eval_crossview_zeroshot.sh`
+3. Fill in the TBD rows in the results table above once both jobs complete.
 
-### How
-Two options:
+### Task 7 — Report integration
+For the final report, the baseline section should clearly state:
 
-#### Option A — keep current simple formulation
-Keep one sampled ground and one sampled satellite image per landmark per batch.
-
-Use this if the goal is:
-- strong baseline simplicity,
-- easier debugging,
-- clean comparison with Sample4Geo-style training.
-
-#### Option B — extend to multi-positive training
-Explore losses or batch logic that allow multiple same-landmark positives without treating them as negatives.
-
-Use this only after the simpler benchmark-aligned baseline is stable.
-
-### Expected outcome
-- Clearer scope for v2
-- Better decision on whether v2 is a paper-aligned baseline or an instance-tailored extension
-
----
-
-## Task 7 — Prepare the baseline for fair comparison in the final report
-
-### What to do
-Turn baseline v2 into the official comparison point for later approaches.
-
-### Why
-The project will likely compare:
-- image-image baseline,
-- multimodal methods,
-- other teammate approaches.
-
-So baseline v2 must be:
-- reproducible,
-- well-described,
-- fairly evaluated.
-
-### How
-For the final baseline description, clearly state:
-1. **Dataset logic**
-   - training pairs are sampled from the same landmark
-2. **Loss logic**
-   - symmetric InfoNCE
-3. **Backbone**
-   - shared ConvNeXt
-4. **Evaluation logic**
-   - query->index retrieval
-   - same-landmark relevance
-   - metrics used
-5. **Limitations**
-   - whether hard-negative mining is implemented
-   - whether multi-positive training is used
-
-### Expected outcome
-- A clean baseline section for the report
-- Fairer comparison to teammate methods
-- Less confusion later when writing methodology/results
-
----
-
-# 6. Suggested execution order
-
-Recommended order for baseline v2:
-
-1. **Fix evaluation split logic**
-2. **Add mAP@1k**
-3. **Make method description honest / or implement hard negatives**
-4. **Improve run logging and saved outputs**
-5. **Run stronger model variants**
-6. **Only then decide on multi-positive extension**
-
-This order gives the fastest path toward a benchmark-comparable and report-ready baseline.
-
----
-
-# 7. One-paragraph summary
-
-Baseline v1 successfully established a working Sample4Geo-like cross-view retrieval model for MMLandmarks. The model trains, improves over time, and reaches a valid first result. However, v1 still uses a simplified evaluation protocol and incomplete benchmark metrics, so its numbers are best treated as internal baseline indicators rather than final comparable results. Baseline v2 should therefore first fix evaluation to the official query->index retrieval setting, add mAP@1k, clarify or implement the hard-negative strategy, and improve experiment logging. After that, stronger runs and possible multi-positive extensions will be much more meaningful.
+1. **Method:** shared-encoder contrastive retrieval, symmetric InfoNCE, Sample4Geo-style GPS+DSS hard-negative sampling
+2. **Backbone:** ConvNeXt-Base pretrained on ImageNet-22k, fine-tuned on MMLandmarks
+3. **Training data:** MMLandmarks `train` split — 17,557 landmarks (ground + satellite pairs)
+4. **Evaluation protocol:** unpooled (18,689 individual ground queries), full 100,539-image satellite gallery — same as MMLandmarks Table 2
+5. **Results:** R@1, R@5, R@10, mAP@1k for both g2s and s2g directions
+6. **Zero-shot reference:** also report ConvNeXt-Base zero-shot to show the contribution of MMLandmarks training
+7. **Comparison note:** MMCLIP and GeoClip are zero-shot; our trained model is a separate experimental condition
+8. **Limitations:** image-only, single positive per step, 224px, ConvNeXt-Base (not CLIP backbone)
