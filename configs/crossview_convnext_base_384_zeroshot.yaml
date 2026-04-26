@@ -1,0 +1,28 @@
+# Cross-view retrieval — ConvNeXt-Base at 384px (Option A zero-shot baseline)
+# Matches Sample4Geo's likely starting checkpoint: IN-22k pre-trained, then fine-tuned
+# on IN-1k at 384px. Use for zero-shot eval only (--pretrained-only --no-pool).
+#
+# Run:
+#   python -m mmgeo.crossview.eval \
+#       --config configs/crossview_convnext_base_384_zeroshot.yaml \
+#       --pretrained-only --no-pool \
+#       --output eval_results/zeroshot_convnext_base_384.json
+
+data:
+  root: "data/MML_Data"
+
+model:
+  backbone: "convnext_base.fb_in22k_ft_in1k_384"   # same arch as fb_in22k, IN-1k fine-tune @ 384px
+  embed_dim: 0                                       # native 1024
+
+training:
+  img_size: 384
+  eval_batch_size: 128   # 384px inputs are 3× larger; reduce batch to fit GPU memory
+
+evaluation:
+  recall_ks: [1, 5, 10]
+  map_k: 1000
+  directions: ["g2s", "s2g"]
+  include_index: true
+
+device: "cuda"

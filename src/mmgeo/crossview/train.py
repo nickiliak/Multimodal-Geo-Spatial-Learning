@@ -408,6 +408,7 @@ def _run_eval(
     device: torch.device,
     cfg: dict,
     pool_queries: bool = True,
+    norm: tuple[list[float], list[float]] | None = None,
 ) -> dict[str, dict[str, float]]:
     """Run benchmark-style cross-view retrieval evaluation.
 
@@ -419,12 +420,18 @@ def _run_eval(
 
     A retrieved item is relevant if it shares the query's landmark_id.
 
+    Parameters
+    ----------
+    norm : (mean, std) tuple or None
+        Override normalization values. If None, uses standard ImageNet defaults.
+
     Returns
     -------
     dict mapping direction ("g2s", "s2g") → metrics dict.
     """
     eval_cfg = cfg.get("evaluation", {}) or {}
-    eval_transform = get_eval_transforms(img_size)
+    mean, std = norm if norm is not None else (None, None)
+    eval_transform = get_eval_transforms(img_size, **({} if mean is None else {"mean": mean, "std": std}))
     eval_batch = cfg["training"].get("eval_batch_size", 128)
     num_workers = cfg["training"].get("num_workers", 4)
 

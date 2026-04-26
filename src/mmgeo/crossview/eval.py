@@ -34,6 +34,7 @@ import argparse
 import json
 from pathlib import Path
 
+import timm.data
 import torch
 import yaml
 
@@ -119,6 +120,10 @@ def main() -> None:
     data_root = Path(cfg["data"]["root"])
     img_size = cfg["training"].get("img_size", 224)
 
+    data_cfg = timm.data.resolve_data_config({}, model=model.backbone)
+    norm = (list(data_cfg["mean"]), list(data_cfg["std"]))
+    print(f"timm data_config normalization: mean={norm[0]}, std={norm[1]}")
+
     results = _run_eval(
         model=model,
         data_root=data_root,
@@ -126,6 +131,7 @@ def main() -> None:
         device=device,
         cfg=cfg,
         pool_queries=args.pool_queries,
+        norm=norm,
     )
 
     print(f"\n{'='*60}")
