@@ -82,6 +82,11 @@ def main() -> None:
         "--output", type=str, default=None,
         help="Optional path to save results as JSON (e.g. eval_results.json)",
     )
+    parser.add_argument(
+        "--save-checkpoint", dest="save_checkpoint", type=str, default=None,
+        help="Save the loaded model weights as a .pt file (e.g. checkpoints/zeroshot.pt). "
+             "Useful for archiving pretrained-only weights for offline cluster use.",
+    )
     args = parser.parse_args()
 
     with open(args.config) as f:
@@ -114,6 +119,13 @@ def main() -> None:
 
     model.to(device)
     model.eval()
+
+    if args.save_checkpoint:
+        save_path = Path(args.save_checkpoint)
+        save_path.parent.mkdir(parents=True, exist_ok=True)
+        torch.save({"model_state_dict": model.state_dict(), "epoch": 0}, save_path)
+        print(f"Saved weights to {save_path}")
+
     print(f"Pool queries: {args.pool_queries}")
     print(f"{'='*60}")
 

@@ -23,6 +23,7 @@ uv run python -m mmgeo.crossview.eval \
     --config configs/crossview_convnext_base_384_zeroshot.yaml \
     --pretrained-only \
     --no-pool \
+    --save-checkpoint "checkpoints/zeroshot_convnext_base_384.pt" \
     --output "eval_results/zeroshot_convnext_base_384_$(date +%Y%m%d_%H%M%S).json"
 
 echo "Job finished at $(date)"
