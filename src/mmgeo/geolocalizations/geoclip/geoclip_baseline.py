@@ -43,9 +43,9 @@ class newGeoCLIP(GeoCLIP):
 
         if transformer:
             #Transformer with 4 layers and 8 heads
-            encoder_layer = torch.nn.TransformerEncoderLayer(d_model=512, nhead=8)
+            encoder_layer = torch.nn.TransformerEncoderLayer(d_model=512, nhead=8,device=self.device)
             self.transformer = torch.nn.TransformerEncoder(encoder_layer, num_layers=4)
-            self.cls_token = nn.Parameter(torch.randn(1, 512), device=self.device) # CLS token for aggregating image features)
+            self.cls_token = nn.Parameter(torch.randn(1, 512, device=self.device)) # CLS token for aggregating image features)
         else:
             #We combine them based on how similar they are
             #We calculate a score based on cosine similarity to the mean, 
