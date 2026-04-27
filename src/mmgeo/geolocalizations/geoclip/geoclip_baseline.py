@@ -45,7 +45,7 @@ class newGeoCLIP(GeoCLIP):
             #Transformer with 4 layers and 8 heads
             encoder_layer = torch.nn.TransformerEncoderLayer(d_model=512, nhead=8)
             self.transformer = torch.nn.TransformerEncoder(encoder_layer, num_layers=4)
-            self.cls_token = nn.Parameter(torch.randn(1, 512)).to(self.device)
+            self.cls_token = nn.Parameter(torch.randn(1, 512), device=self.device) # CLS token for aggregating image features)
         else:
             #We combine them based on how similar they are
             #We calculate a score based on cosine similarity to the mean, 
@@ -72,36 +72,35 @@ class newGeoCLIP(GeoCLIP):
 
         #Combine images features here using either transformer or similarity-based weighting
         if hasattr(self, 'transformer'):
-            #Images need to be run through the transformer, based on their landmark ID and masked
-            #We need to create a mask for the transformer based on the landmark ID
+            # Build a padded (num_landmarks, max_batch_images, 512) tensor by scattering
+            # raw_features into their landmark's slot. position_in_group gives each image
+            # a 0..count-1 index within its landmark group.
+            position_in_group = torch.zeros_like(inverse_indices)
+            running = torch.zeros(num_landmarks, dtype=torch.long, device=self.device)
+            for i in range(inverse_indices.size(0)):
+                lid = inverse_indices[i]
+                position_in_group[i] = running[lid]
+                running[lid] += 1
 
-            #-------------STRAIGHT GEMINI CODE-----------
-            # Shape: (Num_Landmarks, Max_Images + 1, 512) -> +1 for the CLS token
-            padded_features = torch.zeros((num_landmarks, max_batch_images + 1, self.d_model), device=self.device)
-            padding_mask = torch.ones((num_landmarks, max_batch_images + 1), dtype=torch.bool, device=self.device)
-            
-            # Place CLS tokens at the start of every sequence
-            padded_features[:, 0, :] = self.cls_token
-            padding_mask[:, 0] = False # Never mask the CLS token
-            # 2. Create 'local' indices for each image (e.g., 0, 1, 2 for group A; 0, 1 for group B)
-            # We sort the inverse_indices to keep groups together
-            sorted_indices = torch.argsort(inverse_indices)
-            sorted_inverse = inverse_indices[sorted_indices]
+            padded = torch.zeros((num_landmarks, max_batch_images, 512), device=self.device)
+            padded[inverse_indices, position_in_group] = raw_features
 
-            # This clever trick generates [0, 1, 2, 0, 1...] based on the group IDs
-            local_idx = torch.arange(len(landmark_id), device=self.device)
-            # Subtract the starting index of each group
-            group_starts = torch.cat([torch.tensor([0], device=self.device), torch.cumsum(counts, dim=0)[:-1]])
-            local_idx = torch.arange(len(landmark_id), device=self.device) - group_starts[sorted_inverse]
+            # Prepend CLS token: (num_landmarks, 1+max_batch_images, 512)
+            cls = self.cls_token.unsqueeze(0).expand(num_landmarks, -1, -1)
+            seq = torch.cat([cls, padded], dim=1)
 
-            # 3. Use advanced indexing to fill the padded tensor in one shot
-            # +1 to account for the CLS token at index 0
-            padded_features[sorted_inverse, local_idx + 1] = raw_features[sorted_indices]
-            padding_mask[sorted_inverse, local_idx + 1] = False
+            # key_padding_mask: True where token should be ignored.
+            # CLS is always valid; image slot j is valid iff j < counts[landmark].
+            arange = torch.arange(max_batch_images, device=self.device).unsqueeze(0)
+            image_pad_mask = arange >= counts  # (num_landmarks, max_batch_images)
+            cls_mask = torch.zeros((num_landmarks, 1), dtype=torch.bool, device=self.device)
+            key_padding_mask = torch.cat([cls_mask, image_pad_mask], dim=1)
 
-            # 5. Transformer & Prediction
-            transformed = self.transformer(padded_features, src_key_padding_mask=padding_mask)
-            image_features = transformed[:, 0, :] # Extract CLS
+            # TransformerEncoderLayer defaults to (S, N, E); transpose accordingly.
+            seq = seq.transpose(0, 1)
+            out = self.transformer(seq, src_key_padding_mask=key_padding_mask)
+            image_features = out[0]  # CLS output, (num_landmarks, 512)
+
         else:
             #Calculate the mean embedding for each landmark ID
             group_sum = torch.zeros((num_landmarks, 512), device=self.device)
@@ -193,6 +192,91 @@ class GeoClipBaseline:
 
     def _load_and_preprocess(self, image_path: Path) -> torch.Tensor:
         """Load a single image through GeoCLIP's CLIPProcessor preprocessing."""
+        img = Image.open(image_path).convert("RGB")
+        return self.model.image_encoder.preprocess_image(img).squeeze(0)
+
+
+class NewGeoClipBaseline:
+    """Inference wrapper around `newGeoCLIP` that aggregates multiple ground
+    images per landmark via a transformer encoder before scoring against a
+    GPS gallery.
+
+    Assumes `image_paths` and `landmark_ids` are sorted by landmark, so each
+    landmark's images form a contiguous run. Batches are formed along landmark
+    boundaries — a single landmark is never split across batches.
+
+    One prediction is returned per *unique* landmark, in the order landmarks
+    first appear in the input.
+    """
+
+    def __init__(self, device: str = "cuda", transformer: bool = True) -> None:
+        self.device = torch.device(device)
+        self.model = newGeoCLIP(device=device, transformer=transformer)
+        _patch_image_encoder(self.model.image_encoder)
+        self.model.to(self.device)
+        self.model.eval()
+        self._gallery_tensor: torch.Tensor | None = None
+        self._gallery_coords: np.ndarray | None = None
+
+    def build_gallery(self, coords: np.ndarray) -> None:
+        self._gallery_coords = coords
+        self._gallery_tensor = torch.tensor(coords, dtype=torch.float32).to(self.device)
+
+    def predict_batch(
+        self,
+        image_paths: list[Path],
+        landmark_ids: np.ndarray,
+        batch_size: int = 64,
+    ) -> np.ndarray:
+        """Predict GPS for a list of images grouped by landmark.
+
+        Returns one ``[lat, lon]`` per unique landmark, in first-appearance order.
+        """
+        assert self._gallery_tensor is not None, "Call build_gallery() first"
+        assert len(image_paths) == len(landmark_ids), (
+            "image_paths and landmark_ids must align"
+        )
+
+        # Find contiguous landmark group boundaries.
+        lids = np.asarray(landmark_ids)
+        change = np.flatnonzero(np.r_[True, lids[1:] != lids[:-1]])
+        group_starts = np.r_[change, len(lids)]  # n_groups + 1
+
+        # Pack groups into batches without splitting a group.
+        batches: list[tuple[int, int]] = []  # (start_idx, end_idx) into image_paths
+        i = 0
+        while i < len(change):
+            start = change[i]
+            j = i
+            while (
+                j + 1 < len(change)
+                and group_starts[j + 1] - start <= batch_size
+            ):
+                j += 1
+            end = group_starts[j + 1]
+            batches.append((start, end))
+            i = j + 1
+
+        all_preds: list[np.ndarray] = []
+        for start, end in tqdm(batches, desc="Predicting", unit="batch"):
+            batch_paths = image_paths[start:end]
+            batch_lids = torch.as_tensor(
+                lids[start:end], dtype=torch.long, device=self.device
+            )
+            batch_tensors = torch.stack(
+                [self._load_and_preprocess(p) for p in batch_paths]
+            ).to(self.device)
+
+            with torch.no_grad():
+                logits = self.model(
+                    batch_tensors, self._gallery_tensor, batch_lids
+                )  # (n_landmarks_in_batch, n_gallery)
+                top1 = logits.softmax(dim=-1).argmax(dim=-1).cpu().numpy()
+            all_preds.append(self._gallery_coords[top1])
+
+        return np.concatenate(all_preds, axis=0)
+
+    def _load_and_preprocess(self, image_path: Path) -> torch.Tensor:
         img = Image.open(image_path).convert("RGB")
         return self.model.image_encoder.preprocess_image(img).squeeze(0)
 
