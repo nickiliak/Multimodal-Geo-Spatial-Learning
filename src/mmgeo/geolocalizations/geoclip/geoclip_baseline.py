@@ -112,7 +112,7 @@ class newGeoCLIP(GeoCLIP):
             similarities = F.cosine_similarity(raw_features, expanded_means, dim=1)
 
             #Calculate a weight for each image embedding based on the cosine similarity (e.g. softmax)
-            tau = 0.1 # Temperature. Quite racist right now
+            tau = 0.1 # Temperature. Quite racist right now (maybe run sweep)
             exp_sim = torch.exp(similarities / tau)
             sum_exp = torch.zeros((num_landmarks,), device=self.device)
             sum_exp.index_add_(0, inverse_indices, exp_sim)
@@ -356,7 +356,7 @@ def load_query_data(
             true_coords[len(image_paths)-1,:] = true_coordsmerged[j,:]
             landmark_ids[len(image_paths)-1] = landmark_idsmerged[j]
 
-    return image_paths, true_coordsmerged, landmark_ids
+    return image_paths, true_coords, landmark_ids
 
 
 def load_train_data(
