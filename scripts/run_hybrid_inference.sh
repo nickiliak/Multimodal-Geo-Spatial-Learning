@@ -33,13 +33,13 @@ print(f'GPU: {torch.cuda.get_device_name(0)}')
 echo ">>> Running hybrid inference sweep..."
 uv run --no-sync python scripts/run_hybrid_inference.py \
     --data-root data/MML_Data \
-    --ckpt models/best1.pt \
+    --ckpt models/zeroshot_convnext_base_384.pt\
     --cache-dir outputs/hybrid_cache \
     --output outputs/hybrid/results_${LSB_JOBID}.json \
-    --radii-km 5,25,100,500,2000,inf \
-    --index-modes query full \
-    --query-modes one_per_landmark all \
-    --fallbacks fail fallback_full \
+    --radii-km 10,inf \
+    --index-modes  full \
+    --query-modes  all \
+    --fallbacks fallback_full \
     --num-workers 6 \
     --batch-size 128
 

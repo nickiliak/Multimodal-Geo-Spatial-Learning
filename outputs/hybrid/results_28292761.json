@@ -1,0 +1,70 @@
+{
+  "device": "cuda",
+  "sample4geo_ckpt": "models/zeroshot_convnext_base_384.pt",
+  "data_root": "data/MML_Data",
+  "geoclip_gallery_source": "paper",
+  "radii_km": [
+    10.0,
+    Infinity
+  ],
+  "per_config": [
+    {
+      "index_mode": "full",
+      "query_mode": "all",
+      "gallery_size": 100539,
+      "gallery_embed_s": 0.0,
+      "geoclip_s_total": 501.479043032974,
+      "s4g_embed_s_total": 167.43796989601105
+    }
+  ],
+  "runs": [
+    {
+      "index_mode": "full",
+      "query_mode": "all",
+      "radius_km": 10.0,
+      "fallback": "fallback_full",
+      "mAP@1k": 0.07883159698051395,
+      "R@1": 0.05008561643835616,
+      "R@5": 0.1016160102739726,
+      "R@10": 0.133080051369863,
+      "dist@1km": 0.08203125,
+      "dist@10km": 0.24154537671232876,
+      "dist@25km": 0.2887414383561644,
+      "dist@200km": 0.445044948630137,
+      "dist@750km": 0.690871147260274,
+      "dist@2500km": 0.910691352739726,
+      "empty_rate": 0.0,
+      "mean_candidates": 125.92995505136986,
+      "median_candidates": 85.0,
+      "rerank_ms_per_query": 0.05799353301919014,
+      "geoclip_ms_per_query": 26.834280984213077,
+      "s4g_embed_ms_per_query": 8.959651642551961,
+      "total_ms_per_query": 35.851926159784234,
+      "total_queries": 18688
+    },
+    {
+      "index_mode": "full",
+      "query_mode": "all",
+      "radius_km": Infinity,
+      "fallback": "fallback_full",
+      "mAP@1k": 0.021632724203884263,
+      "R@1": 0.008561643835616438,
+      "R@5": 0.025845462328767124,
+      "R@10": 0.0430222602739726,
+      "dist@1km": 0.02108304794520548,
+      "dist@10km": 0.06357020547945205,
+      "dist@25km": 0.07544948630136987,
+      "dist@200km": 0.14142765410958905,
+      "dist@750km": 0.3348137842465753,
+      "dist@2500km": 0.7157534246575342,
+      "empty_rate": 0.0,
+      "mean_candidates": 100539.0,
+      "median_candidates": 100539.0,
+      "rerank_ms_per_query": 0.05439016763687019,
+      "geoclip_ms_per_query": 26.834280984213077,
+      "s4g_embed_ms_per_query": 8.959651642551961,
+      "total_ms_per_query": 35.84832279440191,
+      "total_queries": 18688
+    }
+  ]
+}

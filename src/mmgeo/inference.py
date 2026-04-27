@@ -50,7 +50,7 @@ FallbackPolicy = Literal["fail", "fallback_full"]
 DEFAULT_RADII_KM = [5.0, 25.0, 100.0, 500.0, 2000.0, float("inf")]
 DEFAULT_RECALL_KS = [1, 5, 10]
 DEFAULT_MAP_K = 1000
-DEFAULT_DIST_THRESHOLDS_KM = [1, 25, 200, 750, 2500]
+DEFAULT_DIST_THRESHOLDS_KM = [1, 10, 25, 200, 750, 2500]
 
 
 # ---------------------------------------------------------------------------
@@ -491,7 +491,7 @@ class HybridPipeline:
         sample4geo_ckpt: Path,
         device: torch.device,
         cache_dir: Path,
-        geoclip_gallery_source: str = "paper",
+        geoclip_gallery_source: str = "index",
         num_workers: int = 4,
         batch_size: int = 128,
     ) -> None:
