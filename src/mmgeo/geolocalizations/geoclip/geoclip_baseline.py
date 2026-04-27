@@ -30,6 +30,113 @@ def _patch_image_encoder(encoder: torch.nn.Module) -> None:
 
     encoder.forward = patched_forward
 
+import torch.nn as nn
+import torch.nn.functional as F
+
+class newGeoCLIP(GeoCLIP):
+    """GeoCLIP variant that uses a transformer architecture to encode multiple images per landmark"""
+
+    def __init__(self, device: str = "cuda", transformer=True):
+        super().__init__(from_pretrained=True)
+        self.device = torch.device(device)
+        self.to(self.device)
+
+        if transformer:
+            #Transformer with 4 layers and 8 heads
+            encoder_layer = torch.nn.TransformerEncoderLayer(d_model=512, nhead=8)
+            self.transformer = torch.nn.TransformerEncoder(encoder_layer, num_layers=4)
+            self.cls_token = nn.Parameter(torch.randn(1, 512)).to(self.device)
+        else:
+            #We combine them based on how similar they are
+            #We calculate a score based on cosine similarity to the mean, 
+            # then softmax, and then weight the embeddings accordingly
+            pass
+    
+    def forward(self, image, location, landmark_id):
+        """ GeoCLIP's forward pass
+
+        Args:
+            image (torch.Tensor): Image tensor of shape (n, 3, 224, 224)
+            location (torch.Tensor): GPS location tensor of shape (m, 2)
+            landmark_id (torch.Tensor): Landmark ID tensor of shape (n,)
+
+        Returns:
+            logits_per_landmark (torch.Tensor): Logits per landmark of shape (num_landmarks, m)
+        """
+
+        raw_features = self.image_encoder(image)
+        unique_landmark_ids,inverse_indices = torch.unique(landmark_id,return_inverse=True)
+        num_landmarks = unique_landmark_ids.size(0)
+        counts = torch.bincount(inverse_indices).view(-1,1) # (Num_Landmarks, 1)
+        max_batch_images = counts.max().item() # Max number of images for any landmark ID in the batch / Masked attention max
+
+        #Combine images features here using either transformer or similarity-based weighting
+        if hasattr(self, 'transformer'):
+            #Images need to be run through the transformer, based on their landmark ID and masked
+            #We need to create a mask for the transformer based on the landmark ID
+
+            #-------------STRAIGHT GEMINI CODE-----------
+            # Shape: (Num_Landmarks, Max_Images + 1, 512) -> +1 for the CLS token
+            padded_features = torch.zeros((num_landmarks, max_batch_images + 1, self.d_model), device=self.device)
+            padding_mask = torch.ones((num_landmarks, max_batch_images + 1), dtype=torch.bool, device=self.device)
+            
+            # Place CLS tokens at the start of every sequence
+            padded_features[:, 0, :] = self.cls_token
+            padding_mask[:, 0] = False # Never mask the CLS token
+            # 2. Create 'local' indices for each image (e.g., 0, 1, 2 for group A; 0, 1 for group B)
+            # We sort the inverse_indices to keep groups together
+            sorted_indices = torch.argsort(inverse_indices)
+            sorted_inverse = inverse_indices[sorted_indices]
+
+            # This clever trick generates [0, 1, 2, 0, 1...] based on the group IDs
+            local_idx = torch.arange(len(landmark_id), device=self.device)
+            # Subtract the starting index of each group
+            group_starts = torch.cat([torch.tensor([0], device=self.device), torch.cumsum(counts, dim=0)[:-1]])
+            local_idx = torch.arange(len(landmark_id), device=self.device) - group_starts[sorted_inverse]
+
+            # 3. Use advanced indexing to fill the padded tensor in one shot
+            # +1 to account for the CLS token at index 0
+            padded_features[sorted_inverse, local_idx + 1] = raw_features[sorted_indices]
+            padding_mask[sorted_inverse, local_idx + 1] = False
+
+            # 5. Transformer & Prediction
+            transformed = self.transformer(padded_features, src_key_padding_mask=padding_mask)
+            image_features = transformed[:, 0, :] # Extract CLS
+        else:
+            #Calculate the mean embedding for each landmark ID
+            group_sum = torch.zeros((num_landmarks, 512), device=self.device)
+            group_sum.index_add_(0, inverse_indices, raw_features)
+            group_means = group_sum / counts # (Num_Landmarks, 512)
+            expanded_means = group_means[inverse_indices] # (n, 512)
+
+            #Calculate cosine similarity of each image embedding to the mean embedding of its landmark ID
+            similarities = F.cosine_similarity(raw_features, expanded_means, dim=1)
+
+            #Calculate a weight for each image embedding based on the cosine similarity (e.g. softmax)
+            tau = 0.1 # Temperature. Quite racist right now
+            exp_sim = torch.exp(similarities / tau)
+            sum_exp = torch.zeros((num_landmarks,), device=self.device)
+            sum_exp.index_add_(0, inverse_indices, exp_sim)
+            weights = exp_sim / sum_exp[inverse_indices]
+
+            #Weight the image embeddings accordingly and sum to get a single embedding per landmark ID
+            weighted_features = raw_features * weights.unsqueeze(1)
+            image_features = torch.zeros((num_landmarks, 512), device=self.device)
+            image_features.index_add_(0, inverse_indices, weighted_features)
+
+        location_features = self.location_encoder(location)
+        logit_scale = self.logit_scale.exp()
+        
+        # Normalize features
+        image_features = F.normalize(image_features, dim=1)
+        location_features = F.normalize(location_features, dim=1)
+        
+        # Cosine similarity (Image Features & Location Features)
+        logits_per_landmark = logit_scale * (image_features @ location_features.t())
+
+        return logits_per_landmark
+
+
 
 class GeoClipBaseline:
     """Zero-shot GeoClip inference against a custom GPS gallery.
