@@ -334,9 +334,11 @@ def load_query_data(
     merged = query_df.merge(ground_df, on="landmark_id")
 
     true_coordsmerged = merged[["lat", "lon"]].values
+    landmark_idsmerged = merged["landmark_id"].values
     image_paths: list[Path] = []
     n_images = sum(len(str(r).split()) for r in merged["images"])
     true_coords = np.zeros((n_images, 2))
+    landmark_ids = np.zeros((n_images,), dtype=int)
     for j, row in merged.iterrows():
 
         for i in range(len(str(row["images"]).split())):
@@ -352,9 +354,9 @@ def load_query_data(
             )
             image_paths.append(path)
             true_coords[len(image_paths)-1,:] = true_coordsmerged[j,:]
+            landmark_ids[len(image_paths)-1] = landmark_idsmerged[j]
 
-    landmark_ids = merged["landmark_id"].values
-    return image_paths, true_coords, landmark_ids
+    return image_paths, true_coordsmerged, landmark_ids
 
 
 def load_train_data(
@@ -378,9 +380,11 @@ def load_train_data(
     merged = train_df.merge(ground_df, on="landmark_id")
 
     true_coordsmerged = merged[["lat", "lon"]].values
+    landmark_idsmerged = merged["landmark_id"].values
     image_paths: list[Path] = []
     n_images = sum(len(str(r).split()) for r in merged["images"])
     true_coords = np.zeros((n_images, 2))
+    landmark_ids = np.zeros((n_images,), dtype=int)
     for j, row in merged.iterrows():
 
         for i in range(len(str(row["images"]).split())):
@@ -396,6 +400,6 @@ def load_train_data(
             )
             image_paths.append(path)
             true_coords[len(image_paths)-1,:] = true_coordsmerged[j,:]
+            landmark_ids[len(image_paths)-1] = landmark_idsmerged[j]
 
-    landmark_ids = merged["landmark_id"].values
     return image_paths, true_coords, landmark_ids
