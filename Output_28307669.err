@@ -1,0 +1,7 @@
+Resolved 125 packages in 722ms
+Audited 116 packages in 181ms
+[NbConvertApp] WARNING | Config option `cwd` not recognized by `ExecutePreprocessor`.
+[NbConvertApp] WARNING | Config option `cwd` not recognized by `ExecutePreprocessor`.
+[NbConvertApp] Converting notebook notebooks/team/03_geoclip_zeroshot.ipynb to notebook
+[NbConvertApp] WARNING | Config option `cwd` not recognized by `ExecutePreprocessor`.
+[NbConvertApp] Writing 258257 bytes to notebooks/team/03_geoclip_zeroshot.ipynb

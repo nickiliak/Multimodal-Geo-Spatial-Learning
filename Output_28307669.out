@@ -1,0 +1,121 @@
+--------------------------------------------------
+Job ID: 28307669 | Node: n-62-20-14 | Date: Mon Apr 27 20:19:23 CEST 2026
+--------------------------------------------------
+Mon Apr 27 20:19:23 2026       
++-----------------------------------------------------------------------------------------+
+| NVIDIA-SMI 580.126.20             Driver Version: 580.126.20     CUDA Version: 13.0     |
++-----------------------------------------+------------------------+----------------------+
+| GPU  Name                 Persistence-M | Bus-Id          Disp.A | Volatile Uncorr. ECC |
+| Fan  Temp   Perf          Pwr:Usage/Cap |           Memory-Usage | GPU-Util  Compute M. |
+|                                         |                        |               MIG M. |
+|=========================================+========================+======================|
+|   0  Tesla V100-PCIE-32GB           On  |   00000000:D8:00.0 Off |                    0 |
+| N/A   48C    P0             30W /  250W |       0MiB /  32768MiB |      0%   E. Process |
+|                                         |                        |                  N/A |
++-----------------------------------------+------------------------+----------------------+
+
++-----------------------------------------------------------------------------------------+
+| Processes:                                                                              |
+|  GPU   GI   CI              PID   Type   Process name                        GPU Memory |
+|        ID   ID                                                               Usage      |
+|=========================================================================================|
+|  No running processes found                                                             |
++-----------------------------------------------------------------------------------------+
+>>> Syncing environment with uv...
+>>> Validating PyTorch CUDA...
+PyTorch 2.5.1+cu121, CUDA available: True
+CUDA version: 12.1, GPU: Tesla V100-PCIE-32GB
+>>> Running GeoClip zero-shot notebook...
+Done.
+
+------------------------------------------------------------
+Sender: LSF System <lsfadmin@hpc.dtu.dk>
+Subject: Job 28307669: <geoclip_zeroshot> in cluster <dcc> Done
+
+Job <geoclip_zeroshot> was submitted from host <hpclogin1> by user <s250219> in cluster <dcc> at Mon Apr 27 20:18:32 2026
+Job was executed on host(s) <4*n-62-20-14>, in queue <gpuv100>, as user <s250219> in cluster <dcc> at Mon Apr 27 20:19:22 2026
+</zhome/70/7/219373> was used as the home directory.
+</zhome/70/7/219373/Multimodal-Geo-Spatial-Learning> was used as the working directory.
+Started at Mon Apr 27 20:19:22 2026
+Terminated at Mon Apr 27 20:40:04 2026
+Results reported at Mon Apr 27 20:40:04 2026
+
+Your job looked like:
+
+------------------------------------------------------------
+# LSBATCH: User input
+#!/bin/sh
+### LSF Queue Options
+#BSUB -q gpuv100
+#BSUB -J geoclip_zeroshot
+#BSUB -n 4
+#BSUB -R "span[hosts=1]"
+#BSUB -R "rusage[mem=4GB]"
+#BSUB -M 5GB
+#BSUB -gpu "num=1:mode=exclusive_process"
+#BSUB -W 3:00
+#BSUB -o Output_%J.out
+#BSUB -e Output_%J.err
+
+set -e
+
+echo "--------------------------------------------------"
+echo "Job ID: $LSB_JOBID | Node: $(hostname) | Date: $(date)"
+echo "--------------------------------------------------"
+
+export PATH="$HOME/.local/bin:$PATH"
+cd ~/Multimodal-Geo-Spatial-Learning || { echo "Project directory not found"; exit 1; }
+
+nvidia-smi
+
+echo ">>> Syncing environment with uv..."
+uv sync
+
+echo ">>> Validating PyTorch CUDA..."
+uv run --no-sync python -c "
+import torch
+print(f'PyTorch {torch.__version__}, CUDA available: {torch.cuda.is_available()}')
+if torch.cuda.is_available():
+    print(f'CUDA version: {torch.version.cuda}, GPU: {torch.cuda.get_device_name(0)}')
+assert torch.cuda.is_available(), 'CUDA unavailable'
+" || {
+    echo "CRITICAL: CUDA unavailable in Python environment."
+    exit 1
+}
+
+echo ">>> Running GeoClip zero-shot notebook..."
+uv run --no-sync jupyter nbconvert \
+    --to notebook \
+    --execute \
+    --inplace \
+    --ExecutePreprocessor.timeout=3600 \
+    --ExecutePreprocessor.cwd="$(pwd)/notebooks/team" \
+    notebooks/team/03_geoclip_zeroshot.ipynb
+
+echo "Done."
+
+------------------------------------------------------------
+
+Successfully completed.
+
+Resource usage summary:
+
+    CPU time :                                   1070.00 sec.
+    Max Memory :                                 1470 MB
+    Average Memory :                             1195.91 MB
+    Total Requested Memory :                     16384.00 MB
+    Delta Memory :                               14914.00 MB
+    Max Swap :                                   -
+    Max Processes :                              6
+    Max Threads :                                30
+    Run time :                                   1242 sec.
+    Turnaround time :                            1292 sec.
+
+The output (if any) is above this job summary.
+
+
+
+PS:
+
+Read file <Output_28307669.err> for stderr output of this job.
+
