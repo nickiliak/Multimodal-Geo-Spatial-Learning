@@ -1,0 +1,64 @@
+# Cross-view retrieval — v3
+# Changes from v2:
+#   - Backbone: convnext_base.fb_in22k_ft_in1k_384 (fine-tuned at 384px on IN-1k,
+#     stronger starting point than in22k-only used in zero-shot baseline)
+#   - img_size: 384 (matches backbone's fine-tuning resolution)
+#   - batch_size: 24 (reduced from 64 — 384px activations ~3× larger than 224px)
+#   - eval_batch_size: 192 (reduced from 384 for same reason)
+#   - label_smoothing: 0.1 (re-enabled; hurts InfoNCE with hard labels but
+#     should help with multi-positive soft labels)
+#   - n_ground: 3 (multi-positive InfoNCE — 3 ground views per satellite per step)
+#   - pool_queries: false (unpooled eval = paper-comparable from the start)
+# Requires V100 32GB (select[gpu32gb]).
+
+data:
+  root: "data/MML_Data"
+
+model:
+  backbone: "convnext_base.fb_in22k_ft_in1k_384"  # 88M params, IN-22k → IN-1k fine-tune
+  embed_dim: 0                                      # native 1024
+
+training:
+  epochs: 35
+  batch_size: 24          # 384px on 32GB V100 (224px used 64; ~3x memory at 384px)
+  img_size: 384           # matches backbone pretraining resolution
+  n_ground: 3             # ground images per landmark per step (multi-positive InfoNCE)
+  lr: 0.0001
+  weight_decay: 0.0001
+  temperature: 0.07
+  learnable_temp: true
+  label_smoothing: 0.1
+  warmup_epochs: 3
+  warmup_start_factor: 0.1
+  min_lr_ratio: 0.01
+  num_workers: 6
+  prefetch_factor: 4
+  persistent_workers: true
+  eval_every: 3
+  eval_batch_size: 192    # reduced from 384 for 384px inference
+
+evaluation:
+  recall_ks: [1, 5, 10]
+  map_k: 1000
+  directions: ["g2s", "s2g"]
+  include_index: true
+  pool_queries: false     # unpooled = paper-comparable (18,689 individual queries)
+
+# Sample4Geo-style hard-negative sampling
+hard_negatives:
+  enabled: true
+  neighbor_pool: 64
+  pool_size: 32
+  iters_per_epoch: null   # null ⇒ N // batch_size
+  gps_epochs: 4
+  dss_refresh_every: 1
+  dss_embed_batch: 128
+
+device: "cuda"
+save_dir: "checkpoints/crossview"
+
+logging:
+  runs_root: "checkpoints/crossview"
+  run_prefix: "cv_v3_base_"
+  run_tag: null
+  selection_metric: "g2s_recall@1"

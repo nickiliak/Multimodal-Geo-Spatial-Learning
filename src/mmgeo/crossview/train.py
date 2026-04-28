@@ -39,7 +39,7 @@ from mmgeo.crossview.dataset import (
 )
 from mmgeo.crossview.evaluate import evaluate_crossview
 from mmgeo.crossview.logging_utils import RunLogger
-from mmgeo.crossview.losses import SymmetricInfoNCE
+from mmgeo.crossview.losses import MultiPositiveInfoNCE, SymmetricInfoNCE
 from mmgeo.crossview.model import CrossViewModel
 from mmgeo.crossview.sampling import (
     HardNegativeBatchSampler,
@@ -52,7 +52,7 @@ from mmgeo.crossview.sampling import (
 def train_one_epoch(
     model: CrossViewModel,
     dataloader: DataLoader,
-    loss_fn: SymmetricInfoNCE,
+    loss_fn: nn.Module,  # SymmetricInfoNCE or MultiPositiveInfoNCE
     optimizer: torch.optim.Optimizer,
     device: torch.device,
     epoch: int,
@@ -70,17 +70,32 @@ def train_one_epoch(
         ground_imgs = batch["ground_img"].to(device)
         sat_imgs = batch["sat_img"].to(device)
 
+        # Handle multi-positive batches: ground_imgs may be (B, K, C, H, W)
+        B = sat_imgs.shape[0]
+        K = 1
+        if ground_imgs.dim() == 5:
+            B, K, C, H, W = ground_imgs.shape
+            ground_imgs = ground_imgs.view(B * K, C, H, W)
+
         # Forward: shared encoder for both views
-        ground_embeds = model(ground_imgs)
-        sat_embeds = model(sat_imgs)
+        ground_embeds = model(ground_imgs)  # (B*K, D) or (B, D)
+        sat_embeds = model(sat_imgs)        # (B, D)
 
         # Loss
         loss = loss_fn(ground_embeds, sat_embeds)
-        
-        # Diagnostic stats: if these stay flat, training is near-uniform.
+
+        # Diagnostic stats (computed on mean-pooled ground per landmark so
+        # diag_sim / batch_acc are comparable across single- and multi-positive runs).
         with torch.no_grad():
-            sims = ground_embeds @ sat_embeds.T  # cosine similarities
-            bsz = sims.size(0)
+            if K > 1:
+                D = ground_embeds.shape[-1]
+                ground_diag = torch.nn.functional.normalize(
+                    ground_embeds.view(B, K, D).mean(dim=1), dim=-1
+                )  # (B, D) — mean-pooled, re-normalised
+            else:
+                ground_diag = ground_embeds
+            sims = ground_diag @ sat_embeds.T  # (B, B)
+            bsz = B
             diag = sims.diag()
             if bsz > 1:
                 offdiag_mask = ~torch.eye(bsz, dtype=torch.bool, device=sims.device)
@@ -135,11 +150,13 @@ def train(cfg: dict, resume: str | None = None) -> None:
     img_size = cfg["training"].get("img_size", 384)
     batch_size = cfg["training"].get("batch_size", 64)
 
+    n_ground = cfg["training"].get("n_ground", 1)
     train_dataset = MMLCrossViewDataset(
         data_root=data_root,
         split="train",
         transform_ground=get_train_transforms(img_size),
         transform_sat=get_train_transforms(img_size),
+        n_ground=n_ground,
     )
 
     # ---- Hard-negative sampler setup (Sample4Geo-style) ----
@@ -209,11 +226,17 @@ def train(cfg: dict, resume: str | None = None) -> None:
     model.to(device)
 
     # ---- Loss ----
-    loss_fn = SymmetricInfoNCE(
+    loss_kwargs = dict(
         temperature=cfg["training"].get("temperature", 0.07),
         learnable_temp=cfg["training"].get("learnable_temp", True),
         label_smoothing=cfg["training"].get("label_smoothing", 0.1),
     )
+    if n_ground > 1:
+        loss_fn = MultiPositiveInfoNCE(**loss_kwargs)
+        print(f"[Loss] MultiPositiveInfoNCE  (n_ground={n_ground})")
+    else:
+        loss_fn = SymmetricInfoNCE(**loss_kwargs)
+        print(f"[Loss] SymmetricInfoNCE  (n_ground=1)")
     loss_fn.to(device)
 
     # ---- Optimizer ----
@@ -407,7 +430,7 @@ def _run_eval(
     img_size: int,
     device: torch.device,
     cfg: dict,
-    pool_queries: bool = True,
+    pool_queries: bool | None = None,
     norm: tuple[list[float], list[float]] | None = None,
 ) -> dict[str, dict[str, float]]:
     """Run benchmark-style cross-view retrieval evaluation.
@@ -422,6 +445,10 @@ def _run_eval(
 
     Parameters
     ----------
+    pool_queries : bool or None
+        If None (default), reads ``evaluation.pool_queries`` from cfg
+        (default False = unpooled, paper-comparable). Pass explicitly to
+        override the config value.
     norm : (mean, std) tuple or None
         Override normalization values. If None, uses standard ImageNet defaults.
 
@@ -430,6 +457,8 @@ def _run_eval(
     dict mapping direction ("g2s", "s2g") → metrics dict.
     """
     eval_cfg = cfg.get("evaluation", {}) or {}
+    if pool_queries is None:
+        pool_queries = bool(eval_cfg.get("pool_queries", False))
     mean, std = norm if norm is not None else (None, None)
     eval_transform = get_eval_transforms(img_size, **({} if mean is None else {"mean": mean, "std": std}))
     eval_batch = cfg["training"].get("eval_batch_size", 128)

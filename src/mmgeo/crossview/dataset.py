@@ -72,9 +72,9 @@ def get_eval_transforms(
 class MMLCrossViewDataset(Dataset):
     """Cross-view training dataset for MMLandmarks.
 
-    Each sample returns a (ground_image, satellite_image) pair from the same
-    landmark. Images are randomly sampled per landmark each epoch, providing
-    natural augmentation across epochs.
+    Each sample returns a ground-satellite pair (or K ground images + 1
+    satellite) from the same landmark. Images are randomly sampled per
+    landmark each epoch, providing natural augmentation across epochs.
 
     Parameters
     ----------
@@ -86,6 +86,12 @@ class MMLCrossViewDataset(Dataset):
         Transform for ground images.
     transform_sat : callable, optional
         Transform for satellite images.
+    n_ground : int
+        Number of ground images to sample per landmark per step.
+        When ``n_ground=1`` (default), ``ground_img`` is a ``(3, H, W)``
+        tensor as before. When ``n_ground > 1``, ``ground_img`` is a
+        ``(K, 3, H, W)`` tensor (stacked views). Used for multi-positive
+        InfoNCE (v3).
     """
 
     def __init__(
@@ -94,9 +100,11 @@ class MMLCrossViewDataset(Dataset):
         split: str = "train",
         transform_ground: transforms.Compose | None = None,
         transform_sat: transforms.Compose | None = None,
+        n_ground: int = 1,
     ) -> None:
         self.data_root = Path(data_root)
         self.split = split
+        self.n_ground = max(1, int(n_ground))
 
         self.transform_ground = transform_ground or get_train_transforms()
         self.transform_sat = transform_sat or get_train_transforms()
@@ -144,28 +152,41 @@ class MMLCrossViewDataset(Dataset):
         return len(self.landmark_ids)
 
     def __getitem__(self, idx: int) -> dict:
-        """Return a ground-satellite pair from the same landmark.
+        """Return a ground-satellite pair (or K ground images) from the same landmark.
 
-        Returns dict with keys: ground_img, sat_img, landmark_id, lat, lon
+        Returns dict with keys:
+          ground_img  : (3, H, W) when n_ground=1, else (K, 3, H, W)
+          sat_img     : (3, H, W)
+          landmark_id : int
+          lat, lon    : float
         """
         lid = self.landmark_ids[idx]
 
-        # Randomly pick one ground and one satellite image
-        g_hex = np.random.choice(self.ground_images[lid])
+        # Sample n_ground ground images (with replacement if fewer available)
+        available = self.ground_images[lid]
+        replace = len(available) < self.n_ground
+        g_hexes = np.random.choice(available, size=self.n_ground, replace=replace)
+
+        # Load and transform all ground images
+        g_imgs = []
+        for g_hex in g_hexes:
+            g_path = _hex_path(self.data_root, self.split, "ground", g_hex)
+            g_imgs.append(self.transform_ground(Image.open(g_path).convert("RGB")))
+
+        # Stack to (K, 3, H, W) or squeeze to (3, H, W) when K=1
+        if self.n_ground == 1:
+            g_out = g_imgs[0]
+        else:
+            g_out = torch.stack(g_imgs, dim=0)  # (K, 3, H, W)
+
+        # One satellite image
         s_hex = np.random.choice(self.sat_images[lid])
-
-        g_path = _hex_path(self.data_root, self.split, "ground", g_hex)
         s_path = _hex_path(self.data_root, self.split, "satellite", s_hex)
-
-        g_img = Image.open(g_path).convert("RGB")
-        s_img = Image.open(s_path).convert("RGB")
-
-        g_img = self.transform_ground(g_img)
-        s_img = self.transform_sat(s_img)
+        s_img = self.transform_sat(Image.open(s_path).convert("RGB"))
 
         lat, lon = self.coords[lid]
         return {
-            "ground_img": g_img,
+            "ground_img": g_out,
             "sat_img": s_img,
             "landmark_id": lid,
             "lat": lat,

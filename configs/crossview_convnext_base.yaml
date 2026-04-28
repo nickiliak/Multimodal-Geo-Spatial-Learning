@@ -6,18 +6,18 @@ data:
   root: "data/MML_Data"
 
 model:
-  backbone: "convnext_base.fb_in22k"   # 88M params
+  backbone: "convnext_base.fb_in22k_ft_in1k_384"   # 88M params
   embed_dim: 0                          # native 1024
 
 training:
   epochs: 35
   batch_size: 64          # convnext_base @ 224px on 32GB V100 (256px OOM'd)
-  img_size: 224           # 256px exceeded 32GB at batch 64; revisit with AMP/grad-ckpt
+  img_size: 384           # 256px exceeded 32GB at batch 64; revisit with AMP/grad-ckpt
   lr: 0.0001
   weight_decay: 0.0001
   temperature: 0.07
   learnable_temp: true
-  label_smoothing: 0.0
+  label_smoothing: 0.1
   warmup_epochs: 3
   warmup_start_factor: 0.1
   min_lr_ratio: 0.01
