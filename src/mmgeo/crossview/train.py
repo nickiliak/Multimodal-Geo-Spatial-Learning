@@ -39,7 +39,7 @@ from mmgeo.crossview.dataset import (
 )
 from mmgeo.crossview.evaluate import evaluate_crossview
 from mmgeo.crossview.logging_utils import RunLogger
-from mmgeo.crossview.losses import SymmetricInfoNCE
+from mmgeo.crossview.losses import MultiPositiveInfoNCE, SymmetricInfoNCE
 from mmgeo.crossview.model import CrossViewModel
 from mmgeo.crossview.sampling import (
     HardNegativeBatchSampler,
@@ -52,7 +52,7 @@ from mmgeo.crossview.sampling import (
 def train_one_epoch(
     model: CrossViewModel,
     dataloader: DataLoader,
-    loss_fn: SymmetricInfoNCE,
+    loss_fn: nn.Module,  # SymmetricInfoNCE or MultiPositiveInfoNCE
     optimizer: torch.optim.Optimizer,
     device: torch.device,
     epoch: int,
@@ -70,17 +70,32 @@ def train_one_epoch(
         ground_imgs = batch["ground_img"].to(device)
         sat_imgs = batch["sat_img"].to(device)
 
+        # Handle multi-positive batches: ground_imgs may be (B, K, C, H, W)
+        B = sat_imgs.shape[0]
+        K = 1
+        if ground_imgs.dim() == 5:
+            B, K, C, H, W = ground_imgs.shape
+            ground_imgs = ground_imgs.view(B * K, C, H, W)
+
         # Forward: shared encoder for both views
-        ground_embeds = model(ground_imgs)
-        sat_embeds = model(sat_imgs)
+        ground_embeds = model(ground_imgs)  # (B*K, D) or (B, D)
+        sat_embeds = model(sat_imgs)        # (B, D)
 
         # Loss
         loss = loss_fn(ground_embeds, sat_embeds)
-        
-        # Diagnostic stats: if these stay flat, training is near-uniform.
+
+        # Diagnostic stats (computed on mean-pooled ground per landmark so
+        # diag_sim / batch_acc are comparable across single- and multi-positive runs).
         with torch.no_grad():
-            sims = ground_embeds @ sat_embeds.T  # cosine similarities
-            bsz = sims.size(0)
+            if K > 1:
+                D = ground_embeds.shape[-1]
+                ground_diag = torch.nn.functional.normalize(
+                    ground_embeds.view(B, K, D).mean(dim=1), dim=-1
+                )  # (B, D) — mean-pooled, re-normalised
+            else:
+                ground_diag = ground_embeds
+            sims = ground_diag @ sat_embeds.T  # (B, B)
+            bsz = B
             diag = sims.diag()
             if bsz > 1:
                 offdiag_mask = ~torch.eye(bsz, dtype=torch.bool, device=sims.device)
@@ -113,8 +128,18 @@ def train_one_epoch(
     }
 
 
-def train(cfg: dict) -> None:
-    """Main training function."""
+def train(cfg: dict, resume: str | None = None) -> None:
+    """Main training function.
+
+    Parameters
+    ----------
+    cfg : dict
+        Parsed YAML config.
+    resume : str | None
+        Optional path to a ``best.pt`` / ``last.pt`` checkpoint to resume from.
+        Model weights are restored and the LR scheduler is fast-forwarded so
+        the cosine decay continues from the correct position.
+    """
 
     # ---- Device ----
     device = torch.device(cfg.get("device", "cuda" if torch.cuda.is_available() else "cpu"))
@@ -125,11 +150,13 @@ def train(cfg: dict) -> None:
     img_size = cfg["training"].get("img_size", 384)
     batch_size = cfg["training"].get("batch_size", 64)
 
+    n_ground = cfg["training"].get("n_ground", 1)
     train_dataset = MMLCrossViewDataset(
         data_root=data_root,
         split="train",
         transform_ground=get_train_transforms(img_size),
         transform_sat=get_train_transforms(img_size),
+        n_ground=n_ground,
     )
 
     # ---- Hard-negative sampler setup (Sample4Geo-style) ----
@@ -199,11 +226,17 @@ def train(cfg: dict) -> None:
     model.to(device)
 
     # ---- Loss ----
-    loss_fn = SymmetricInfoNCE(
+    loss_kwargs = dict(
         temperature=cfg["training"].get("temperature", 0.07),
         learnable_temp=cfg["training"].get("learnable_temp", True),
         label_smoothing=cfg["training"].get("label_smoothing", 0.1),
     )
+    if n_ground > 1:
+        loss_fn = MultiPositiveInfoNCE(**loss_kwargs)
+        print(f"[Loss] MultiPositiveInfoNCE  (n_ground={n_ground})")
+    else:
+        loss_fn = SymmetricInfoNCE(**loss_kwargs)
+        print(f"[Loss] SymmetricInfoNCE  (n_ground=1)")
     loss_fn.to(device)
 
     # ---- Optimizer ----
@@ -239,6 +272,19 @@ def train(cfg: dict) -> None:
     else:
         scheduler = CosineAnnealingLR(optimizer, T_max=epochs, eta_min=lr * min_lr_ratio)
 
+    # ---- Resume: load checkpoint weights + fast-forward scheduler ----
+    start_epoch = 1
+    if resume:
+        ckpt = torch.load(resume, map_location=device)
+        model.load_state_dict(ckpt["model_state_dict"])
+        start_epoch = int(ckpt["epoch"]) + 1
+        print(f"[Resume] Loaded checkpoint from epoch {ckpt['epoch']} ({resume})")
+        print(f"[Resume] Resuming training from epoch {start_epoch}")
+        # Fast-forward scheduler so cosine decay continues from the right position
+        for _ in range(ckpt["epoch"]):
+            scheduler.step()
+        print(f"[Resume] LR after fast-forward: {optimizer.param_groups[0]['lr']:.6f}")
+
     # ---- Run directory + logger ----
     logging_cfg = cfg.get("logging", {}) or {}
     runs_root = Path(logging_cfg.get("runs_root", cfg.get("save_dir", "checkpoints/crossview")))
@@ -256,9 +302,11 @@ def train(cfg: dict) -> None:
 
     print(f"\nStarting training: {epochs} epochs, batch_size={batch_size}")
     print(f"Backbone: {backbone}, LR: {lr}")
+    if resume:
+        print(f"Resuming from epoch {start_epoch} / {epochs}")
     print(f"{'='*60}\n")
 
-    for epoch in range(1, epochs + 1):
+    for epoch in range(start_epoch, epochs + 1):
         t0 = time.time()
 
         # ---- Hard-negative phase switch / DSS refresh ----
@@ -317,12 +365,13 @@ def train(cfg: dict) -> None:
                 }, ckpt_path)
                 print(f"  → New best! {logger.selection_metric}={logger.best['score']:.4f}, saved to {ckpt_path}")
 
-    # Save final checkpoint + finalize run outputs
-    torch.save({
-        "epoch": epochs,
-        "model_state_dict": model.state_dict(),
-        "config": cfg,
-    }, save_dir / "last.pt")
+        # Always overwrite last.pt so a wall-time kill leaves a usable resume point
+        torch.save({
+            "epoch": epoch,
+            "model_state_dict": model.state_dict(),
+            "config": cfg,
+        }, save_dir / "last.pt")
+
     logger.finalize()
     best_score = logger.best["score"] if logger.best["epoch"] is not None else float("nan")
     print(f"\nTraining complete. Best {logger.selection_metric}: {best_score:.4f}")
@@ -381,6 +430,8 @@ def _run_eval(
     img_size: int,
     device: torch.device,
     cfg: dict,
+    pool_queries: bool | None = None,
+    norm: tuple[list[float], list[float]] | None = None,
 ) -> dict[str, dict[str, float]]:
     """Run benchmark-style cross-view retrieval evaluation.
 
@@ -392,12 +443,24 @@ def _run_eval(
 
     A retrieved item is relevant if it shares the query's landmark_id.
 
+    Parameters
+    ----------
+    pool_queries : bool or None
+        If None (default), reads ``evaluation.pool_queries`` from cfg
+        (default False = unpooled, paper-comparable). Pass explicitly to
+        override the config value.
+    norm : (mean, std) tuple or None
+        Override normalization values. If None, uses standard ImageNet defaults.
+
     Returns
     -------
     dict mapping direction ("g2s", "s2g") → metrics dict.
     """
     eval_cfg = cfg.get("evaluation", {}) or {}
-    eval_transform = get_eval_transforms(img_size)
+    if pool_queries is None:
+        pool_queries = bool(eval_cfg.get("pool_queries", False))
+    mean, std = norm if norm is not None else (None, None)
+    eval_transform = get_eval_transforms(img_size, **({} if mean is None else {"mean": mean, "std": std}))
     eval_batch = cfg["training"].get("eval_batch_size", 128)
     num_workers = cfg["training"].get("num_workers", 4)
 
@@ -441,6 +504,7 @@ def _run_eval(
         results["g2s"] = evaluate_crossview(
             model, q_loader, idx_loader, device,
             ks=ks, map_k=map_k, direction="g2s",
+            pool_queries=pool_queries,
         )
 
     if "s2g" in directions:
@@ -449,6 +513,7 @@ def _run_eval(
         results["s2g"] = evaluate_crossview(
             model, q_loader, idx_loader, device,
             ks=ks, map_k=map_k, direction="s2g",
+            pool_queries=pool_queries,
         )
 
     return results
@@ -457,12 +522,18 @@ def _run_eval(
 def main():
     parser = argparse.ArgumentParser(description="Train cross-view retrieval baseline")
     parser.add_argument("--config", type=str, default="configs/crossview_baseline.yaml")
+    parser.add_argument(
+        "--resume", type=str, default=None,
+        help="Path to a checkpoint (best.pt or last.pt) to resume training from. "
+             "The model weights and epoch number are restored; the LR scheduler is "
+             "fast-forwarded to match.",
+    )
     args = parser.parse_args()
 
     with open(args.config) as f:
         cfg = yaml.safe_load(f)
 
-    train(cfg)
+    train(cfg, resume=args.resume)
 
 
 if __name__ == "__main__":
