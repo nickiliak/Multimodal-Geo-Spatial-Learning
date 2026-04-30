@@ -1,0 +1,397 @@
+Job started at Wed Apr 29 05:52:30 CEST 2026
+Running on n-62-20-10
+Wed Apr 29 05:52:30 2026       
++-----------------------------------------------------------------------------------------+
+| NVIDIA-SMI 580.126.20             Driver Version: 580.126.20     CUDA Version: 13.0     |
++-----------------------------------------+------------------------+----------------------+
+| GPU  Name                 Persistence-M | Bus-Id          Disp.A | Volatile Uncorr. ECC |
+| Fan  Temp   Perf          Pwr:Usage/Cap |           Memory-Usage | GPU-Util  Compute M. |
+|                                         |                        |               MIG M. |
+|=========================================+========================+======================|
+|   0  Tesla V100-SXM2-32GB           On  |   00000000:3B:00.0 Off |                    0 |
+| N/A   41C    P0             43W /  300W |       0MiB /  32768MiB |      0%   E. Process |
+|                                         |                        |                  N/A |
++-----------------------------------------+------------------------+----------------------+
+
++-----------------------------------------------------------------------------------------+
+| Processes:                                                                              |
+|  GPU   GI   CI              PID   Type   Process name                        GPU Memory |
+|        ID   ID                                                               Usage      |
+|=========================================================================================|
+|  No running processes found                                                             |
++-----------------------------------------------------------------------------------------+
+Device: cuda
+[MMLCrossViewDataset] split=train, landmarks=17557, ground_imgs=310661, sat_imgs=186574
+
+[HardNeg] Precomputing GPS neighbors (k=64)...
+[HardNeg] GPS neighbor table: (17557, 64)
+[HardNeg] iters_per_epoch=1097
+[MMLCrossViewDataset] split=train, landmarks=17557, ground_imgs=310661, sat_imgs=186574
+[CrossViewModel] backbone=convnext_base.fb_in22k_ft_in1k_384, feature_dim=1024, embed_dim=1024, params=87.6M
+[Loss] MultiPositiveInfoNCE  (n_ground=2)
+[AMP] Mixed precision enabled (fp16)
+[RunLogger] run dir: checkpoints/crossview/cv_v3_base_20260429_055409
+
+Starting training: 36 epochs, batch_size=16
+Backbone: convnext_base.fb_in22k_ft_in1k_384, LR: 0.0001
+============================================================
+
+[HardNeg] Epoch 1: phase=gps
+Epoch   1/36 | loss=2.9348 | diag=0.1913 | offdiag=0.1397 | margin=0.0516 | acc=0.195 | temp=0.0702 | lr=0.000040 | time=542.8s
+[HardNeg] Epoch 2: phase=gps
+Epoch   2/36 | loss=2.6383 | diag=0.3316 | offdiag=0.2272 | margin=0.1044 | acc=0.336 | temp=0.0708 | lr=0.000070 | time=527.2s
+[HardNeg] Epoch 3: phase=gps
+Epoch   3/36 | loss=2.4410 | diag=0.4065 | offdiag=0.2625 | margin=0.1440 | acc=0.433 | temp=0.0715 | lr=0.000100 | time=525.7s
+[HardNeg] Epoch 4: phase=gps
+Epoch   4/36 | loss=2.3279 | diag=0.4352 | offdiag=0.2664 | margin=0.1688 | acc=0.487 | temp=0.0723 | lr=0.000100 | time=526.0s
+[HardNeg] Rebuilding DSS neighbor table (epoch 5)...
+[HardNeg] DSS neighbor table: (17557, 64)
+[HardNeg] Epoch 5: phase=dss
+Epoch   5/36 | loss=2.8541 | diag=0.4928 | offdiag=0.4386 | margin=0.0543 | acc=0.275 | temp=0.0725 | lr=0.000099 | time=849.4s
+[HardNeg] Rebuilding DSS neighbor table (epoch 6)...
+[HardNeg] DSS neighbor table: (17557, 64)
+[HardNeg] Epoch 6: phase=dss
+Epoch   6/36 | loss=2.7575 | diag=0.4500 | offdiag=0.3777 | margin=0.0723 | acc=0.337 | temp=0.0715 | lr=0.000098 | time=844.7s
+[HardNeg] Rebuilding DSS neighbor table (epoch 7)...
+[HardNeg] DSS neighbor table: (17557, 64)
+[HardNeg] Epoch 7: phase=dss
+Epoch   7/36 | loss=2.6624 | diag=0.4327 | offdiag=0.3444 | margin=0.0883 | acc=0.403 | temp=0.0695 | lr=0.000096 | time=846.5s
+[HardNeg] Rebuilding DSS neighbor table (epoch 8)...
+[HardNeg] DSS neighbor table: (17557, 64)
+[HardNeg] Epoch 8: phase=dss
+Epoch   8/36 | loss=2.5749 | diag=0.4231 | offdiag=0.3211 | margin=0.1020 | acc=0.444 | temp=0.0669 | lr=0.000094 | time=845.3s
+[HardNeg] Rebuilding DSS neighbor table (epoch 9)...
+[HardNeg] DSS neighbor table: (17557, 64)
+[HardNeg] Epoch 9: phase=dss
+Epoch   9/36 | loss=2.4585 | diag=0.4162 | offdiag=0.2973 | margin=0.1189 | acc=0.511 | temp=0.0639 | lr=0.000092 | time=843.2s
+[MMLImageDataset] split=query, modality=ground, images=18688, landmarks=1000
+[MMLImageDataset] split=query, modality=satellite, images=1000, landmarks=1000
+[MMLImageDataset] split=index, modality=satellite, images=99539, landmarks=99539
+[Eval] gallery satellite: query=1000 + index=99539 = 100539
+
+============================================================
+Evaluating G2S retrieval
+============================================================
+Embedding queries...
+  → 18688 query embeddings, 1000 unique landmarks
+Embedding index...
+  → 100539 index embeddings, 1001 unique landmarks
+Computing metrics...
+  recall@1: 0.0661 (6.61%)
+  recall@5: 0.1492 (14.92%)
+  recall@10: 0.2018 (20.18%)
+  map@1000: 0.1107 (11.07%)
+[MMLImageDataset] split=query, modality=satellite, images=1000, landmarks=1000
+[MMLImageDataset] split=query, modality=ground, images=18688, landmarks=1000
+[MMLImageDataset] split=index, modality=ground, images=714554, landmarks=714554
+[Eval] gallery ground: query=18688 + index=714554 = 733242
+
+============================================================
+Evaluating S2G retrieval
+============================================================
+Embedding queries...
+  → 1000 query embeddings, 1000 unique landmarks
+Embedding index...
+  → 733242 index embeddings, 1001 unique landmarks
+Computing metrics...
+  recall@1: 0.0430 (4.30%)
+  recall@5: 0.1120 (11.20%)
+  recall@10: 0.1610 (16.10%)
+  map@1000: 0.0201 (2.01%)
+  → New best! g2s_recall@1=0.0661, saved to checkpoints/crossview/cv_v3_base_20260429_055409/best.pt
+[HardNeg] Rebuilding DSS neighbor table (epoch 10)...
+[HardNeg] DSS neighbor table: (17557, 64)
+[HardNeg] Epoch 10: phase=dss
+Epoch  10/36 | loss=2.3826 | diag=0.4116 | offdiag=0.2840 | margin=0.1276 | acc=0.553 | temp=0.0610 | lr=0.000089 | time=839.4s
+[HardNeg] Rebuilding DSS neighbor table (epoch 11)...
+[HardNeg] DSS neighbor table: (17557, 64)
+[HardNeg] Epoch 11: phase=dss
+Epoch  11/36 | loss=2.2906 | diag=0.4106 | offdiag=0.2732 | margin=0.1375 | acc=0.599 | temp=0.0581 | lr=0.000086 | time=840.5s
+[HardNeg] Rebuilding DSS neighbor table (epoch 12)...
+[HardNeg] DSS neighbor table: (17557, 64)
+[HardNeg] Epoch 12: phase=dss
+Epoch  12/36 | loss=2.2179 | diag=0.4036 | offdiag=0.2590 | margin=0.1445 | acc=0.635 | temp=0.0557 | lr=0.000083 | time=841.5s
+[HardNeg] Rebuilding DSS neighbor table (epoch 13)...
+[HardNeg] DSS neighbor table: (17557, 64)
+[HardNeg] Epoch 13: phase=dss
+Epoch  13/36 | loss=2.1242 | diag=0.4007 | offdiag=0.2461 | margin=0.1545 | acc=0.678 | temp=0.0533 | lr=0.000079 | time=845.0s
+[HardNeg] Rebuilding DSS neighbor table (epoch 14)...
+[HardNeg] DSS neighbor table: (17557, 64)
+[HardNeg] Epoch 14: phase=dss
+Epoch  14/36 | loss=2.0647 | diag=0.3968 | offdiag=0.2384 | margin=0.1584 | acc=0.708 | temp=0.0513 | lr=0.000075 | time=842.3s
+[HardNeg] Rebuilding DSS neighbor table (epoch 15)...
+[HardNeg] DSS neighbor table: (17557, 64)
+[HardNeg] Epoch 15: phase=dss
+Epoch  15/36 | loss=2.0008 | diag=0.3987 | offdiag=0.2355 | margin=0.1632 | acc=0.736 | temp=0.0494 | lr=0.000071 | time=843.2s
+[HardNeg] Rebuilding DSS neighbor table (epoch 16)...
+[HardNeg] DSS neighbor table: (17557, 64)
+[HardNeg] Epoch 16: phase=dss
+Epoch  16/36 | loss=1.9123 | diag=0.3989 | offdiag=0.2275 | margin=0.1714 | acc=0.773 | temp=0.0477 | lr=0.000067 | time=847.6s
+[HardNeg] Rebuilding DSS neighbor table (epoch 17)...
+[HardNeg] DSS neighbor table: (17557, 64)
+[HardNeg] Epoch 17: phase=dss
+Epoch  17/36 | loss=1.8711 | diag=0.3980 | offdiag=0.2244 | margin=0.1736 | acc=0.785 | temp=0.0464 | lr=0.000062 | time=843.9s
+[HardNeg] Rebuilding DSS neighbor table (epoch 18)...
+[HardNeg] DSS neighbor table: (17557, 64)
+[HardNeg] Epoch 18: phase=dss
+Epoch  18/36 | loss=1.8089 | diag=0.3958 | offdiag=0.2168 | margin=0.1790 | acc=0.813 | temp=0.0453 | lr=0.000058 | time=843.9s
+[MMLImageDataset] split=query, modality=ground, images=18688, landmarks=1000
+[MMLImageDataset] split=query, modality=satellite, images=1000, landmarks=1000
+[MMLImageDataset] split=index, modality=satellite, images=99539, landmarks=99539
+[Eval] gallery satellite: query=1000 + index=99539 = 100539
+
+============================================================
+Evaluating G2S retrieval
+============================================================
+Embedding queries...
+  → 18688 query embeddings, 1000 unique landmarks
+Embedding index...
+  → 100539 index embeddings, 1001 unique landmarks
+Computing metrics...
+  recall@1: 0.0832 (8.32%)
+  recall@5: 0.1841 (18.41%)
+  recall@10: 0.2351 (23.51%)
+  map@1000: 0.1339 (13.39%)
+[MMLImageDataset] split=query, modality=satellite, images=1000, landmarks=1000
+[MMLImageDataset] split=query, modality=ground, images=18688, landmarks=1000
+[MMLImageDataset] split=index, modality=ground, images=714554, landmarks=714554
+[Eval] gallery ground: query=18688 + index=714554 = 733242
+
+============================================================
+Evaluating S2G retrieval
+============================================================
+Embedding queries...
+  → 1000 query embeddings, 1000 unique landmarks
+Embedding index...
+  → 733242 index embeddings, 1001 unique landmarks
+Computing metrics...
+  recall@1: 0.0500 (5.00%)
+  recall@5: 0.1100 (11.00%)
+  recall@10: 0.1560 (15.60%)
+  map@1000: 0.0183 (1.83%)
+  → New best! g2s_recall@1=0.0832, saved to checkpoints/crossview/cv_v3_base_20260429_055409/best.pt
+[HardNeg] Rebuilding DSS neighbor table (epoch 19)...
+[HardNeg] DSS neighbor table: (17557, 64)
+[HardNeg] Epoch 19: phase=dss
+Epoch  19/36 | loss=1.7818 | diag=0.3938 | offdiag=0.2141 | margin=0.1797 | acc=0.819 | temp=0.0443 | lr=0.000053 | time=845.3s
+[HardNeg] Rebuilding DSS neighbor table (epoch 20)...
+[HardNeg] DSS neighbor table: (17557, 64)
+[HardNeg] Epoch 20: phase=dss
+Epoch  20/36 | loss=1.7165 | diag=0.3918 | offdiag=0.2065 | margin=0.1854 | acc=0.849 | temp=0.0435 | lr=0.000048 | time=855.2s
+[HardNeg] Rebuilding DSS neighbor table (epoch 21)...
+[HardNeg] DSS neighbor table: (17557, 64)
+[HardNeg] Epoch 21: phase=dss
+Epoch  21/36 | loss=1.6735 | diag=0.3954 | offdiag=0.2068 | margin=0.1886 | acc=0.863 | temp=0.0427 | lr=0.000043 | time=845.6s
+[HardNeg] Rebuilding DSS neighbor table (epoch 22)...
+[HardNeg] DSS neighbor table: (17557, 64)
+[HardNeg] Epoch 22: phase=dss
+Epoch  22/36 | loss=1.6575 | diag=0.3928 | offdiag=0.2040 | margin=0.1888 | acc=0.866 | temp=0.0421 | lr=0.000039 | time=846.7s
+[HardNeg] Rebuilding DSS neighbor table (epoch 23)...
+[HardNeg] DSS neighbor table: (17557, 64)
+[HardNeg] Epoch 23: phase=dss
+Epoch  23/36 | loss=1.6056 | diag=0.3955 | offdiag=0.2013 | margin=0.1943 | acc=0.885 | temp=0.0417 | lr=0.000034 | time=845.5s
+[HardNeg] Rebuilding DSS neighbor table (epoch 24)...
+[HardNeg] DSS neighbor table: (17557, 64)
+[HardNeg] Epoch 24: phase=dss
+Epoch  24/36 | loss=1.5919 | diag=0.3901 | offdiag=0.1960 | margin=0.1941 | acc=0.890 | temp=0.0413 | lr=0.000030 | time=846.4s
+[HardNeg] Rebuilding DSS neighbor table (epoch 25)...
+[HardNeg] DSS neighbor table: (17557, 64)
+[HardNeg] Epoch 25: phase=dss
+Epoch  25/36 | loss=1.5381 | diag=0.3913 | offdiag=0.1920 | margin=0.1993 | acc=0.908 | temp=0.0410 | lr=0.000026 | time=846.4s
+[HardNeg] Rebuilding DSS neighbor table (epoch 26)...
+[HardNeg] DSS neighbor table: (17557, 64)
+[HardNeg] Epoch 26: phase=dss
+Epoch  26/36 | loss=1.5279 | diag=0.3897 | offdiag=0.1906 | margin=0.1991 | acc=0.908 | temp=0.0407 | lr=0.000022 | time=845.6s
+[HardNeg] Rebuilding DSS neighbor table (epoch 27)...
+[HardNeg] DSS neighbor table: (17557, 64)
+[HardNeg] Epoch 27: phase=dss
+Epoch  27/36 | loss=1.5060 | diag=0.3894 | offdiag=0.1883 | margin=0.2012 | acc=0.920 | temp=0.0404 | lr=0.000018 | time=844.5s
+[MMLImageDataset] split=query, modality=ground, images=18688, landmarks=1000
+[MMLImageDataset] split=query, modality=satellite, images=1000, landmarks=1000
+[MMLImageDataset] split=index, modality=satellite, images=99539, landmarks=99539
+[Eval] gallery satellite: query=1000 + index=99539 = 100539
+
+============================================================
+Evaluating G2S retrieval
+============================================================
+Embedding queries...
+  → 18688 query embeddings, 1000 unique landmarks
+Embedding index...
+  → 100539 index embeddings, 1001 unique landmarks
+Computing metrics...
+  recall@1: 0.0842 (8.42%)
+  recall@5: 0.1801 (18.01%)
+  recall@10: 0.2249 (22.49%)
+  map@1000: 0.1317 (13.17%)
+[MMLImageDataset] split=query, modality=satellite, images=1000, landmarks=1000
+[MMLImageDataset] split=query, modality=ground, images=18688, landmarks=1000
+[MMLImageDataset] split=index, modality=ground, images=714554, landmarks=714554
+[Eval] gallery ground: query=18688 + index=714554 = 733242
+
+============================================================
+Evaluating S2G retrieval
+============================================================
+Embedding queries...
+  → 1000 query embeddings, 1000 unique landmarks
+Embedding index...
+  → 733242 index embeddings, 1001 unique landmarks
+Computing metrics...
+  recall@1: 0.0550 (5.50%)
+  recall@5: 0.1270 (12.70%)
+  recall@10: 0.1590 (15.90%)
+  map@1000: 0.0198 (1.98%)
+  → New best! g2s_recall@1=0.0842, saved to checkpoints/crossview/cv_v3_base_20260429_055409/best.pt
+[HardNeg] Rebuilding DSS neighbor table (epoch 28)...
+[HardNeg] DSS neighbor table: (17557, 64)
+[HardNeg] Epoch 28: phase=dss
+Epoch  28/36 | loss=1.4876 | diag=0.3883 | offdiag=0.1853 | margin=0.2031 | acc=0.919 | temp=0.0402 | lr=0.000015 | time=844.3s
+[HardNeg] Rebuilding DSS neighbor table (epoch 29)...
+[HardNeg] DSS neighbor table: (17557, 64)
+[HardNeg] Epoch 29: phase=dss
+Epoch  29/36 | loss=1.4597 | diag=0.3897 | offdiag=0.1840 | margin=0.2057 | acc=0.928 | temp=0.0401 | lr=0.000012 | time=852.9s
+[HardNeg] Rebuilding DSS neighbor table (epoch 30)...
+[HardNeg] DSS neighbor table: (17557, 64)
+[HardNeg] Epoch 30: phase=dss
+Epoch  30/36 | loss=1.4532 | diag=0.3886 | offdiag=0.1823 | margin=0.2064 | acc=0.930 | temp=0.0400 | lr=0.000009 | time=849.0s
+[HardNeg] Rebuilding DSS neighbor table (epoch 31)...
+[HardNeg] DSS neighbor table: (17557, 64)
+[HardNeg] Epoch 31: phase=dss
+Epoch  31/36 | loss=1.4442 | diag=0.3880 | offdiag=0.1813 | margin=0.2067 | acc=0.933 | temp=0.0399 | lr=0.000007 | time=848.6s
+[HardNeg] Rebuilding DSS neighbor table (epoch 32)...
+[HardNeg] DSS neighbor table: (17557, 64)
+[HardNeg] Epoch 32: phase=dss
+Epoch  32/36 | loss=1.4439 | diag=0.3886 | offdiag=0.1818 | margin=0.2068 | acc=0.931 | temp=0.0399 | lr=0.000005 | time=850.4s
+[HardNeg] Rebuilding DSS neighbor table (epoch 33)...
+[HardNeg] DSS neighbor table: (17557, 64)
+[HardNeg] Epoch 33: phase=dss
+Epoch  33/36 | loss=1.4230 | diag=0.3891 | offdiag=0.1804 | margin=0.2087 | acc=0.935 | temp=0.0398 | lr=0.000003 | time=848.0s
+[HardNeg] Rebuilding DSS neighbor table (epoch 34)...
+[HardNeg] DSS neighbor table: (17557, 64)
+[HardNeg] Epoch 34: phase=dss
+Epoch  34/36 | loss=1.4178 | diag=0.3884 | offdiag=0.1790 | margin=0.2094 | acc=0.940 | temp=0.0398 | lr=0.000002 | time=846.6s
+[HardNeg] Rebuilding DSS neighbor table (epoch 35)...
+[HardNeg] DSS neighbor table: (17557, 64)
+[HardNeg] Epoch 35: phase=dss
+Epoch  35/36 | loss=1.4250 | diag=0.3865 | offdiag=0.1781 | margin=0.2084 | acc=0.937 | temp=0.0398 | lr=0.000001 | time=852.3s
+[HardNeg] Rebuilding DSS neighbor table (epoch 36)...
+[HardNeg] DSS neighbor table: (17557, 64)
+[HardNeg] Epoch 36: phase=dss
+Epoch  36/36 | loss=1.4256 | diag=0.3868 | offdiag=0.1783 | margin=0.2085 | acc=0.935 | temp=0.0398 | lr=0.000001 | time=849.1s
+[MMLImageDataset] split=query, modality=ground, images=18688, landmarks=1000
+[MMLImageDataset] split=query, modality=satellite, images=1000, landmarks=1000
+[MMLImageDataset] split=index, modality=satellite, images=99539, landmarks=99539
+[Eval] gallery satellite: query=1000 + index=99539 = 100539
+
+============================================================
+Evaluating G2S retrieval
+============================================================
+Embedding queries...
+  → 18688 query embeddings, 1000 unique landmarks
+Embedding index...
+  → 100539 index embeddings, 1001 unique landmarks
+Computing metrics...
+  recall@1: 0.0858 (8.58%)
+  recall@5: 0.1813 (18.13%)
+  recall@10: 0.2229 (22.29%)
+  map@1000: 0.1325 (13.25%)
+[MMLImageDataset] split=query, modality=satellite, images=1000, landmarks=1000
+[MMLImageDataset] split=query, modality=ground, images=18688, landmarks=1000
+[MMLImageDataset] split=index, modality=ground, images=714554, landmarks=714554
+[Eval] gallery ground: query=18688 + index=714554 = 733242
+
+============================================================
+Evaluating S2G retrieval
+============================================================
+Embedding queries...
+  → 1000 query embeddings, 1000 unique landmarks
+Embedding index...
+  → 733242 index embeddings, 1001 unique landmarks
+Computing metrics...
+  recall@1: 0.0540 (5.40%)
+  recall@5: 0.1110 (11.10%)
+  recall@10: 0.1370 (13.70%)
+  map@1000: 0.0185 (1.85%)
+  → New best! g2s_recall@1=0.0858, saved to checkpoints/crossview/cv_v3_base_20260429_055409/best.pt
+[RunLogger] finalized run: checkpoints/crossview/cv_v3_base_20260429_055409
+
+Training complete. Best g2s_recall@1: 0.0858
+Job finished at Wed Apr 29 22:24:59 CEST 2026
+
+------------------------------------------------------------
+Sender: LSF System <lsfadmin@hpc.dtu.dk>
+Subject: Job 28320642: <crossview_v3> in cluster <dcc> Done
+
+Job <crossview_v3> was submitted from host <hpclogin1> by user <s250778> in cluster <dcc> at Tue Apr 28 22:47:22 2026
+Job was executed on host(s) <6*n-62-20-10>, in queue <gpuv100>, as user <s250778> in cluster <dcc> at Wed Apr 29 05:52:28 2026
+</zhome/b0/c/220061> was used as the home directory.
+</zhome/b0/c/220061/Multimodal-Geo-Spatial-Learning> was used as the working directory.
+Started at Wed Apr 29 05:52:28 2026
+Terminated at Wed Apr 29 22:24:59 2026
+Results reported at Wed Apr 29 22:24:59 2026
+
+Your job looked like:
+
+------------------------------------------------------------
+# LSBATCH: User input
+#!/bin/bash
+#BSUB -J crossview_v3
+#BSUB -q gpuv100
+#BSUB -gpu "num=1:mode=exclusive_process"
+# Requires 32GB V100 — convnext_base @ 384px
+#BSUB -R "select[gpu32gb]"
+#BSUB -n 6
+#BSUB -R "span[hosts=1] rusage[mem=32GB]"
+#BSUB -W 24:00
+#BSUB -o logs/crossview_v3_%J.out
+#BSUB -e logs/crossview_v3_%J.err
+
+mkdir -p logs
+cd ~/Multimodal-Geo-Spatial-Learning
+
+# Reduces CUDA memory fragmentation — recommended when near the memory limit
+export PYTORCH_CUDA_ALLOC_CONF=expandable_segments:True
+
+echo "Job started at $(date)"
+echo "Running on $(hostname)"
+nvidia-smi
+
+# Set to a checkpoint path to resume, or leave empty to start fresh.
+RESUME=""
+
+if [ -n "$RESUME" ] && [ -f "$RESUME" ]; then
+    echo "Resuming from checkpoint: $RESUME"
+    uv run python -m mmgeo.crossview.train \
+        --config configs/crossview_convnext_base_v3.yaml \
+        --resume "$RESUME"
+else
+    uv run python -m mmgeo.crossview.train \
+        --config configs/crossview_convnext_base_v3.yaml
+fi
+
+echo "Job finished at $(date)"
+
+------------------------------------------------------------
+
+Successfully completed.
+
+Resource usage summary:
+
+    CPU time :                                   207288.00 sec.
+    Max Memory :                                 14369 MB
+    Average Memory :                             10449.56 MB
+    Total Requested Memory :                     196608.00 MB
+    Delta Memory :                               182239.00 MB
+    Max Swap :                                   -
+    Max Processes :                              17
+    Max Threads :                                63
+    Run time :                                   59551 sec.
+    Turnaround time :                            85057 sec.
+
+The output (if any) is above this job summary.
+
+
+
+PS:
+
+Read file <logs/crossview_v3_28320642.err> for stderr output of this job.
+

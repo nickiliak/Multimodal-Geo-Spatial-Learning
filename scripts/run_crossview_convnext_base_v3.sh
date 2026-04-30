@@ -13,6 +13,9 @@
 mkdir -p logs
 cd ~/Multimodal-Geo-Spatial-Learning
 
+# Reduces CUDA memory fragmentation — recommended when near the memory limit
+export PYTORCH_CUDA_ALLOC_CONF=expandable_segments:True
+
 echo "Job started at $(date)"
 echo "Running on $(hostname)"
 nvidia-smi

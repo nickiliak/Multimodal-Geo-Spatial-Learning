@@ -1,0 +1,156 @@
+Job started at Sun Apr 26 02:53:36 CEST 2026
+Running on n-62-11-15
+Sun Apr 26 02:53:36 2026       
++-----------------------------------------------------------------------------------------+
+| NVIDIA-SMI 580.126.20             Driver Version: 580.126.20     CUDA Version: 13.0     |
++-----------------------------------------+------------------------+----------------------+
+| GPU  Name                 Persistence-M | Bus-Id          Disp.A | Volatile Uncorr. ECC |
+| Fan  Temp   Perf          Pwr:Usage/Cap |           Memory-Usage | GPU-Util  Compute M. |
+|                                         |                        |               MIG M. |
+|=========================================+========================+======================|
+|   0  Tesla V100-PCIE-32GB           On  |   00000000:D8:00.0 Off |                    0 |
+| N/A   46C    P0             44W /  250W |       0MiB /  32768MiB |      0%   E. Process |
+|                                         |                        |                  N/A |
++-----------------------------------------+------------------------+----------------------+
+
++-----------------------------------------------------------------------------------------+
+| Processes:                                                                              |
+|  GPU   GI   CI              PID   Type   Process name                        GPU Memory |
+|        ID   ID                                                               Usage      |
+|=========================================================================================|
+|  No running processes found                                                             |
++-----------------------------------------------------------------------------------------+
+Evaluating checkpoint: checkpoints/crossview/cv_v2_base_20260422_230539/best.pt
+Protocol: --no-pool (18,689 individual queries, paper-comparable)
+Device: cuda
+[CrossViewModel] backbone=convnext_base.fb_in22k, feature_dim=1024, embed_dim=1024, params=87.6M
+Loaded checkpoint from epoch 30 (checkpoints/crossview/cv_v2_base_20260422_230539/best.pt)
+Pool queries: False
+============================================================
+[MMLImageDataset] split=query, modality=ground, images=18688, landmarks=1000
+[MMLImageDataset] split=query, modality=satellite, images=1000, landmarks=1000
+[MMLImageDataset] split=index, modality=satellite, images=99539, landmarks=99539
+[Eval] gallery satellite: query=1000 + index=99539 = 100539
+
+============================================================
+Evaluating G2S retrieval
+============================================================
+Embedding queries...
+  → 18688 query embeddings, 1000 unique landmarks
+Embedding index...
+  → 100539 index embeddings, 1001 unique landmarks
+Computing metrics...
+  recall@1: 0.0721 (7.21%)
+  recall@5: 0.1852 (18.52%)
+  recall@10: 0.2531 (25.31%)
+  map@1000: 0.1310 (13.10%)
+[MMLImageDataset] split=query, modality=satellite, images=1000, landmarks=1000
+[MMLImageDataset] split=query, modality=ground, images=18688, landmarks=1000
+[MMLImageDataset] split=index, modality=ground, images=714554, landmarks=714554
+[Eval] gallery ground: query=18688 + index=714554 = 733242
+
+============================================================
+Evaluating S2G retrieval
+============================================================
+Embedding queries...
+  → 1000 query embeddings, 1000 unique landmarks
+Embedding index...
+  → 733242 index embeddings, 1001 unique landmarks
+Computing metrics...
+  recall@1: 0.0520 (5.20%)
+  recall@5: 0.1440 (14.40%)
+  recall@10: 0.1870 (18.70%)
+  map@1000: 0.0266 (2.66%)
+
+============================================================
+SUMMARY  |  pool_queries=False  |  epoch=30
+============================================================
+
+  G2S:
+    recall@1: 7.21%
+    recall@5: 18.52%
+    recall@10: 25.31%
+    map@1000: 13.10%
+
+  S2G:
+    recall@1: 5.20%
+    recall@5: 14.40%
+    recall@10: 18.70%
+    map@1000: 2.66%
+
+Results saved to logs/eval_nopooled_20260426_025336.json
+Job finished at Sun Apr 26 03:46:40 CEST 2026
+
+------------------------------------------------------------
+Sender: LSF System <lsfadmin@hpc.dtu.dk>
+Subject: Job 28291418: <crossview_eval> in cluster <dcc> Done
+
+Job <crossview_eval> was submitted from host <hpclogin1> by user <s250778> in cluster <dcc> at Sun Apr 26 02:23:58 2026
+Job was executed on host(s) <6*n-62-11-15>, in queue <gpuv100>, as user <s250778> in cluster <dcc> at Sun Apr 26 02:53:35 2026
+</zhome/b0/c/220061> was used as the home directory.
+</zhome/b0/c/220061/Multimodal-Geo-Spatial-Learning> was used as the working directory.
+Started at Sun Apr 26 02:53:35 2026
+Terminated at Sun Apr 26 03:46:41 2026
+Results reported at Sun Apr 26 03:46:41 2026
+
+Your job looked like:
+
+------------------------------------------------------------
+# LSBATCH: User input
+#!/bin/bash
+#BSUB -J crossview_eval
+#BSUB -q gpuv100
+#BSUB -gpu "num=1:mode=exclusive_process"
+#BSUB -R "select[gpu32gb]"
+#BSUB -n 6
+#BSUB -R "span[hosts=1] rusage[mem=32GB]"
+#BSUB -W 02:00
+#BSUB -o logs/crossview_eval_%J.out
+#BSUB -e logs/crossview_eval_%J.err
+
+mkdir -p logs
+cd ~/Multimodal-Geo-Spatial-Learning
+
+echo "Job started at $(date)"
+echo "Running on $(hostname)"
+nvidia-smi
+
+# Path to the checkpoint to evaluate
+CKPT="checkpoints/crossview/cv_v2_base_20260422_230539/best.pt"
+
+echo "Evaluating checkpoint: $CKPT"
+echo "Protocol: --no-pool (18,689 individual queries, paper-comparable)"
+
+uv run python -m mmgeo.crossview.eval \
+    --config configs/crossview_convnext_base.yaml \
+    --checkpoint "$CKPT" \
+    --no-pool \
+    --output "logs/eval_nopooled_$(date +%Y%m%d_%H%M%S).json"
+
+echo "Job finished at $(date)"
+
+------------------------------------------------------------
+
+Successfully completed.
+
+Resource usage summary:
+
+    CPU time :                                   11165.00 sec.
+    Max Memory :                                 8605 MB
+    Average Memory :                             5780.65 MB
+    Total Requested Memory :                     196608.00 MB
+    Delta Memory :                               188003.00 MB
+    Max Swap :                                   -
+    Max Processes :                              11
+    Max Threads :                                37
+    Run time :                                   3185 sec.
+    Turnaround time :                            4963 sec.
+
+The output (if any) is above this job summary.
+
+
+
+PS:
+
+Read file <logs/crossview_eval_28291418.err> for stderr output of this job.
+

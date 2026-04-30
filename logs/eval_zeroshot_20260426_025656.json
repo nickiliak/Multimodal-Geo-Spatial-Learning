@@ -1,0 +1,20 @@
+{
+  "checkpoint": "pretrained_only",
+  "epoch": "pretrained",
+  "pretrained_only": true,
+  "pool_queries": false,
+  "results": {
+    "g2s": {
+      "recall@1": 0.002514982876712329,
+      "recall@5": 0.007598458904109589,
+      "recall@10": 0.011344178082191781,
+      "map@1000": 0.005878752156233337
+    },
+    "s2g": {
+      "recall@1": 0.002,
+      "recall@5": 0.002,
+      "recall@10": 0.009,
+      "map@1000": 0.0006230962799625582
+    }
+  }
+}

@@ -25,6 +25,7 @@ from pathlib import Path
 import numpy as np
 import torch
 import torch.nn as nn
+from torch.cuda.amp import GradScaler
 from torch.optim import AdamW
 from torch.optim.lr_scheduler import CosineAnnealingLR, LinearLR, SequentialLR
 from torch.utils.data import ConcatDataset, DataLoader
@@ -56,6 +57,7 @@ def train_one_epoch(
     optimizer: torch.optim.Optimizer,
     device: torch.device,
     epoch: int,
+    scaler: GradScaler | None = None,
 ) -> dict[str, float]:
     """Train for one epoch and return aggregate training metrics."""
     model.train()
@@ -77,12 +79,12 @@ def train_one_epoch(
             B, K, C, H, W = ground_imgs.shape
             ground_imgs = ground_imgs.view(B * K, C, H, W)
 
-        # Forward: shared encoder for both views
-        ground_embeds = model(ground_imgs)  # (B*K, D) or (B, D)
-        sat_embeds = model(sat_imgs)        # (B, D)
-
-        # Loss
-        loss = loss_fn(ground_embeds, sat_embeds)
+        # Forward: shared encoder for both views (AMP-wrapped when scaler provided)
+        amp_enabled = scaler is not None
+        with torch.autocast(device_type=device.type, enabled=amp_enabled):
+            ground_embeds = model(ground_imgs)  # (B*K, D) or (B, D)
+            sat_embeds = model(sat_imgs)        # (B, D)
+            loss = loss_fn(ground_embeds, sat_embeds)
 
         # Diagnostic stats (computed on mean-pooled ground per landmark so
         # diag_sim / batch_acc are comparable across single- and multi-positive runs).
@@ -112,8 +114,13 @@ def train_one_epoch(
 
         # Backward
         optimizer.zero_grad()
-        loss.backward()
-        optimizer.step()
+        if scaler is not None:
+            scaler.scale(loss).backward()
+            scaler.step(optimizer)
+            scaler.update()
+        else:
+            loss.backward()
+            optimizer.step()
 
         total_loss += loss.item()
         n_batches += 1
@@ -245,6 +252,12 @@ def train(cfg: dict, resume: str | None = None) -> None:
     lr = cfg["training"].get("lr", 1e-3)
     optimizer = AdamW(params, lr=lr, weight_decay=cfg["training"].get("weight_decay", 1e-4))
 
+    # ---- AMP scaler ----
+    use_amp = bool(cfg["training"].get("use_amp", False))
+    scaler = GradScaler(enabled=use_amp) if device.type == "cuda" else None
+    if use_amp:
+        print(f"[AMP] Mixed precision enabled (fp16)")
+
     epochs = cfg["training"].get("epochs", 20)
     warmup_epochs = cfg["training"].get("warmup_epochs", 2)
     warmup_start_factor = cfg["training"].get("warmup_start_factor", 0.1)
@@ -280,6 +293,9 @@ def train(cfg: dict, resume: str | None = None) -> None:
         start_epoch = int(ckpt["epoch"]) + 1
         print(f"[Resume] Loaded checkpoint from epoch {ckpt['epoch']} ({resume})")
         print(f"[Resume] Resuming training from epoch {start_epoch}")
+        if scaler is not None and "scaler_state_dict" in ckpt and ckpt["scaler_state_dict"] is not None:
+            scaler.load_state_dict(ckpt["scaler_state_dict"])
+            print(f"[Resume] Loaded AMP scaler state")
         # Fast-forward scheduler so cosine decay continues from the right position
         for _ in range(ckpt["epoch"]):
             scheduler.step()
@@ -322,7 +338,7 @@ def train(cfg: dict, resume: str | None = None) -> None:
             )
             print(f"[HardNeg] Epoch {epoch}: phase={phase}")
 
-        train_metrics = train_one_epoch(model, train_loader, loss_fn, optimizer, device, epoch)
+        train_metrics = train_one_epoch(model, train_loader, loss_fn, optimizer, device, epoch, scaler=scaler)
         scheduler.step()
 
         elapsed = time.time() - t0
@@ -360,6 +376,7 @@ def train(cfg: dict, resume: str | None = None) -> None:
                 torch.save({
                     "epoch": epoch,
                     "model_state_dict": model.state_dict(),
+                    "scaler_state_dict": scaler.state_dict() if scaler is not None else None,
                     "metrics": eval_results,
                     "config": cfg,
                 }, ckpt_path)
@@ -369,6 +386,7 @@ def train(cfg: dict, resume: str | None = None) -> None:
         torch.save({
             "epoch": epoch,
             "model_state_dict": model.state_dict(),
+            "scaler_state_dict": scaler.state_dict() if scaler is not None else None,
             "config": cfg,
         }, save_dir / "last.pt")
 

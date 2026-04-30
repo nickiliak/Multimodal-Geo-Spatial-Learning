@@ -3,11 +3,12 @@
 #   - Backbone: convnext_base.fb_in22k_ft_in1k_384 (fine-tuned at 384px on IN-1k,
 #     stronger starting point than in22k-only used in zero-shot baseline)
 #   - img_size: 384 (matches backbone's fine-tuning resolution)
-#   - batch_size: 24 (reduced from 64 — 384px activations ~3× larger than 224px)
-#   - eval_batch_size: 192 (reduced from 384 for same reason)
+#   - batch_size: 16 (AMP halves activation memory — was 24 before OOM fixes)
+#   - use_amp: true (fp16 mixed precision — ~50% activation memory reduction)
+#   - eval_batch_size: 128 (AMP allows larger eval batches at 384px)
 #   - label_smoothing: 0.1 (re-enabled; hurts InfoNCE with hard labels but
 #     should help with multi-positive soft labels)
-#   - n_ground: 3 (multi-positive InfoNCE — 3 ground views per satellite per step)
+#   - n_ground: 2 (multi-positive InfoNCE — 2 ground views per satellite per step)
 #   - pool_queries: false (unpooled eval = paper-comparable from the start)
 # Requires V100 32GB (select[gpu32gb]).
 
@@ -19,10 +20,11 @@ model:
   embed_dim: 0                                      # native 1024
 
 training:
-  epochs: 35
-  batch_size: 24          # 384px on 32GB V100 (224px used 64; ~3x memory at 384px)
+  epochs: 36
+  batch_size: 16          # AMP (fp16) halves activation memory — 16+32=48 images fits 32GB
   img_size: 384           # matches backbone pretraining resolution
-  n_ground: 3             # ground images per landmark per step (multi-positive InfoNCE)
+  n_ground: 2             # 2 ground views/landmark — multi-positive InfoNCE
+  use_amp: true           # mixed precision fp16 — ~50% activation memory reduction
   lr: 0.0001
   weight_decay: 0.0001
   temperature: 0.07
@@ -34,8 +36,8 @@ training:
   num_workers: 6
   prefetch_factor: 4
   persistent_workers: true
-  eval_every: 3
-  eval_batch_size: 192    # reduced from 384 for 384px inference
+  eval_every: 9           # 4 evals total (ep 9, 18, 27, 36) → ~3h eval overhead with AMP
+  eval_batch_size: 128    # AMP allows larger eval batches too
 
 evaluation:
   recall_ks: [1, 5, 10]
