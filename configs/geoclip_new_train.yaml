@@ -5,15 +5,15 @@ gallery:
   source: index      # honest in-the-wild eval; flip to "paper" for paper-protocol upper-bound
 
 inference:
-  batch_size: 64
+  batch_size: 32
   device: "cuda"
 
 evaluation:
   thresholds_km: [1, 25, 200, 750, 2500]
 
 training:
-  num_epochs: 10
-  landmarks_per_batch: 16   # batch is all images of N landmarks; tune for GPU memory
+  num_epochs: 20
+  landmarks_per_batch: 8   # batch is all images of N landmarks; tune for GPU memory
   lr: 1.0e-4
   num_workers: 4
   checkpoint_path: "models/best_new_geoclip.pth"

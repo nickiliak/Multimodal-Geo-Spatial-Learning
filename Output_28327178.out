@@ -1,0 +1,174 @@
+--------------------------------------------------
+Job ID: 28327178 | Node: n-62-11-16 | Date: Wed Apr 29 18:23:22 CEST 2026
+--------------------------------------------------
+Wed Apr 29 18:23:22 2026       
++-----------------------------------------------------------------------------------------+
+| NVIDIA-SMI 580.126.20             Driver Version: 580.126.20     CUDA Version: 13.0     |
++-----------------------------------------+------------------------+----------------------+
+| GPU  Name                 Persistence-M | Bus-Id          Disp.A | Volatile Uncorr. ECC |
+| Fan  Temp   Perf          Pwr:Usage/Cap |           Memory-Usage | GPU-Util  Compute M. |
+|                                         |                        |               MIG M. |
+|=========================================+========================+======================|
+|   0  Tesla V100-PCIE-32GB           On  |   00000000:D8:00.0 Off |                    0 |
+| N/A   29C    P0             25W /  250W |       0MiB /  32768MiB |      0%   E. Process |
+|                                         |                        |                  N/A |
++-----------------------------------------+------------------------+----------------------+
+
++-----------------------------------------------------------------------------------------+
+| Processes:                                                                              |
+|  GPU   GI   CI              PID   Type   Process name                        GPU Memory |
+|        ID   ID                                                               Usage      |
+|=========================================================================================|
+|  No running processes found                                                             |
++-----------------------------------------------------------------------------------------+
+>>> Syncing environment with uv...
+>>> Validating PyTorch CUDA...
+PyTorch 2.5.1+cu121, CUDA available: True
+CUDA version: 12.1, GPU: Tesla V100-PCIE-32GB
+>>> Training newGeoCLIP transformer aggregator...
+Device: cuda | Data root: /dtu/blackhole/02/137570/MML
+Total parameters: 450,660,354
+Trainable parameters: 13,594,368  (3.02%)
+Train images: 310,661 across 17,557 landmarks
+Query: 18,688 images / 1,000 landmarks
+
+=== Zero-shot eval (untrained transformer) ===
+  Acc@1km: 9.47%
+  Acc@25km: 48.36%
+  Acc@200km: 67.89%
+  Acc@750km: 85.08%
+  Acc@2500km: 92.95%
+  median 33.0 km | mean 445.6 km
+epoch 1 | avg loss 0.0547 | 4406.4s
+  val Acc@1km: 8.07%
+  val Acc@25km: 50.94%
+  val Acc@200km: 71.18%
+  val Acc@750km: 85.77%
+  val Acc@2500km: 93.49%
+  val median 21.9 km | mean 427.2 km
+  -> new best loss 0.0547 saved to models/best_new_geoclip.pth
+epoch 2 | avg loss 0.0487 | 4407.4s
+  val Acc@1km: 8.59%
+  val Acc@25km: 52.67%
+  val Acc@200km: 75.00%
+  val Acc@750km: 88.92%
+  val Acc@2500km: 94.55%
+  val median 16.3 km | mean 341.4 km
+  -> new best loss 0.0487 saved to models/best_new_geoclip.pth
+epoch 3 | avg loss 0.0472 | 4409.3s
+  val Acc@1km: 10.41%
+  val Acc@25km: 52.85%
+  val Acc@200km: 73.04%
+  val Acc@750km: 86.40%
+  val Acc@2500km: 93.77%
+  val median 13.6 km | mean 399.8 km
+  -> new best loss 0.0472 saved to models/best_new_geoclip.pth
+epoch 4 | avg loss 0.0400 | 4410.7s
+  val Acc@1km: 9.57%
+  val Acc@25km: 55.96%
+  val Acc@200km: 75.05%
+  val Acc@750km: 88.76%
+  val Acc@2500km: 94.75%
+  val median 9.5 km | mean 336.7 km
+  -> new best loss 0.0400 saved to models/best_new_geoclip.pth
+epoch 5 | avg loss 0.0413 | 4412.8s
+  val Acc@1km: 10.91%
+  val Acc@25km: 51.86%
+  val Acc@200km: 72.39%
+  val Acc@750km: 87.37%
+  val Acc@2500km: 91.74%
+  val median 18.5 km | mean 447.4 km
+epoch 6 | avg loss 0.0387 | 4409.6s
+  val Acc@1km: 10.67%
+  val Acc@25km: 58.67%
+  val Acc@200km: 78.58%
+  val Acc@750km: 91.35%
+  val Acc@2500km: 96.65%
+  val median 8.4 km | mean 263.8 km
+  -> new best loss 0.0387 saved to models/best_new_geoclip.pth
+epoch 7 | avg loss 0.0397 | 4409.5s
+  val Acc@1km: 10.39%
+  val Acc@25km: 57.97%
+  val Acc@200km: 77.19%
+  val Acc@750km: 91.15%
+  val Acc@2500km: 96.82%
+  val median 7.9 km | mean 261.2 km
+epoch 8 | avg loss 0.0378 | 4413.7s
+  val Acc@1km: 10.09%
+  val Acc@25km: 52.08%
+  val Acc@200km: 71.16%
+  val Acc@750km: 86.33%
+  val Acc@2500km: 92.75%
+  val median 19.1 km | mean 423.1 km
+  -> new best loss 0.0378 saved to models/best_new_geoclip.pth
+epoch 9 | avg loss 0.0365 | 4415.8s
+  val Acc@1km: 11.39%
+  val Acc@25km: 54.18%
+  val Acc@200km: 73.16%
+  val Acc@750km: 87.85%
+  val Acc@2500km: 94.10%
+  val median 11.1 km | mean 378.7 km
+  -> new best loss 0.0365 saved to models/best_new_geoclip.pth
+epoch 10 | avg loss 0.0358 | 4411.9s
+  val Acc@1km: 10.54%
+  val Acc@25km: 56.73%
+  val Acc@200km: 74.36%
+  val Acc@750km: 89.64%
+  val Acc@2500km: 96.45%
+  val median 7.7 km | mean 296.9 km
+  -> new best loss 0.0358 saved to models/best_new_geoclip.pth
+epoch 11 | avg loss 0.0342 | 4412.9s
+  val Acc@1km: 10.61%
+  val Acc@25km: 52.09%
+  val Acc@200km: 71.86%
+  val Acc@750km: 85.83%
+  val Acc@2500km: 90.26%
+  val median 18.0 km | mean 499.7 km
+  -> new best loss 0.0342 saved to models/best_new_geoclip.pth
+epoch 12 | avg loss 0.0346 | 4410.4s
+  val Acc@1km: 12.18%
+  val Acc@25km: 59.08%
+  val Acc@200km: 77.94%
+  val Acc@750km: 92.32%
+  val Acc@2500km: 97.24%
+  val median 6.7 km | mean 238.5 km
+epoch 13 | avg loss 0.0328 | 4412.1s
+  val Acc@1km: 12.42%
+  val Acc@25km: 55.17%
+  val Acc@200km: 73.67%
+  val Acc@750km: 88.91%
+  val Acc@2500km: 95.23%
+  val median 9.7 km | mean 331.1 km
+  -> new best loss 0.0328 saved to models/best_new_geoclip.pth
+epoch 14 | avg loss 0.0323 | 4408.5s
+  val Acc@1km: 10.92%
+  val Acc@25km: 58.70%
+  val Acc@200km: 75.58%
+  val Acc@750km: 92.11%
+  val Acc@2500km: 96.43%
+  val median 6.8 km | mean 272.0 km
+  -> new best loss 0.0323 saved to models/best_new_geoclip.pth
+epoch 15 | avg loss 0.0303 | 4406.3s
+  val Acc@1km: 13.32%
+  val Acc@25km: 54.46%
+  val Acc@200km: 72.63%
+  val Acc@750km: 86.94%
+  val Acc@2500km: 95.23%
+  val median 11.4 km | mean 382.0 km
+  -> new best loss 0.0303 saved to models/best_new_geoclip.pth
+epoch 16 | avg loss 0.0303 | 4408.8s
+  val Acc@1km: 11.04%
+  val Acc@25km: 56.57%
+  val Acc@200km: 76.65%
+  val Acc@750km: 91.42%
+  val Acc@2500km: 96.71%
+  val median 8.2 km | mean 257.4 km
+  -> new best loss 0.0303 saved to models/best_new_geoclip.pth
+epoch 17 | avg loss 0.0300 | 4413.5s
+  val Acc@1km: 11.21%
+  val Acc@25km: 53.98%
+  val Acc@200km: 73.98%
+  val Acc@750km: 85.62%
+  val Acc@2500km: 91.68%
+  val median 12.0 km | mean 461.9 km
+  -> new best loss 0.0300 saved to models/best_new_geoclip.pth

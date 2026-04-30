@@ -96,18 +96,30 @@ def collate(batch):
     return imgs, coords, lids
 
 
-def freeze_backbone(model: newGeoCLIP) -> tuple[int, int]:
+def freeze_backbone(model: newGeoCLIP,freeze=True) -> tuple[int, int]:
     """Freeze everything except the transformer aggregator + CLS token.
 
     Returns (trainable_params, total_params).
     """
-    for p in model.parameters():
-        p.requires_grad = False
-    if hasattr(model, "transformer"):
-        for p in model.transformer.parameters():
-            p.requires_grad = True
-    if hasattr(model, "cls_token"):
-        model.cls_token.requires_grad = True
+    if freeze:
+        for p in model.parameters():
+            p.requires_grad = False
+        if hasattr(model, "transformer"):
+            for p in model.transformer.parameters():
+                p.requires_grad = True
+        if hasattr(model, "cls_token"):
+            model.cls_token.requires_grad = True
+    else:
+        for p in model.parameters():
+            p.requires_grad = False
+        if hasattr(model, "transformer"):
+            for p in model.transformer.parameters():
+                p.requires_grad = True
+        if hasattr(model, "cls_token"):
+            model.cls_token.requires_grad = True
+        if hasattr(model, "image_encoder"):
+            for p in model.image_encoder.mlp.parameters():
+                p.requires_grad = True
 
     total = sum(p.numel() for p in model.parameters())
     trainable = sum(p.numel() for p in model.parameters() if p.requires_grad)
@@ -148,9 +160,9 @@ def main() -> None:
     tcfg = cfg["training"]
     num_epochs = tcfg["num_epochs"]
     landmarks_per_batch = tcfg.get("landmarks_per_batch", 16)
-    lr = tcfg["lr"]
+    lr = 1.0e-5
     num_workers = tcfg.get("num_workers", 4)
-    checkpoint_path = Path(tcfg.get("checkpoint_path", "models/best_new_geoclip.pth"))
+    checkpoint_path = Path(tcfg.get("checkpoint_path", "models/better_new_geoclip.pth"))
     checkpoint_path.parent.mkdir(parents=True, exist_ok=True)
 
     data_root = Path(cfg["data"]["root"])
@@ -160,10 +172,11 @@ def main() -> None:
     print(f"Device: {device} | Data root: {data_root.resolve()}")
 
     baseline = NewGeoClipBaseline(device=device, transformer=True)
+    baseline.model.load_state_dict(torch.load("/zhome/79/0/186934/Multimodal-Geo-Spatial-Learning/models/last_new_geocliporiginal.pth", map_location=device))
     model = baseline.model
     _patch_image_encoder(model.image_encoder)
 
-    trainable, total = freeze_backbone(model)
+    trainable, total = freeze_backbone(model, freeze=False)
     print(f"Total parameters: {total:,}")
     print(f"Trainable parameters: {trainable:,}  ({100 * trainable / total:.2f}%)")
 
@@ -218,8 +231,9 @@ def main() -> None:
         print(f"  Acc@{t}km: {a*100:.2f}%")
     print(f"  median {z['median_km']:.1f} km | mean {z['mean_km']:.1f} km")
 
-    best_acc25 = z["acc"].get(25, 0.0)
-    last_path = checkpoint_path.with_name("last_" + checkpoint_path.name.removeprefix("best_"))
+    #best_acc1 = z["acc"].get(1, 0.0)
+    best_loss = float("inf")
+    last_path = checkpoint_path.with_name("lastbetter_" + checkpoint_path.name.removeprefix("better_"))
 
     for epoch in range(num_epochs):
         model.train()
@@ -244,12 +258,12 @@ def main() -> None:
         print(f"  val median {m['median_km']:.1f} km | mean {m['mean_km']:.1f} km")
 
         torch.save(model.state_dict(), last_path)
-        if m["acc"].get(25, 0.0) > best_acc25:
-            best_acc25 = m["acc"][25]
+        if avg < best_loss:
+            best_loss = avg
             torch.save(model.state_dict(), checkpoint_path)
-            print(f"  -> new best Acc@25km {best_acc25*100:.2f}% saved to {checkpoint_path}")
+            print(f"  -> new best loss {best_loss:.4f} saved to {checkpoint_path}")
 
-    print(f"\nDone. Best Acc@25km: {best_acc25*100:.2f}%")
+    print(f"\nDone. Best loss: {best_loss:.4f}")
 
 
 if __name__ == "__main__":

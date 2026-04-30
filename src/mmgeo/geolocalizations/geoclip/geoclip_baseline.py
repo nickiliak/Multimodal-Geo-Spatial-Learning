@@ -36,8 +36,8 @@ import torch.nn.functional as F
 class newGeoCLIP(GeoCLIP):
     """GeoCLIP variant that uses a transformer architecture to encode multiple images per landmark"""
 
-    def __init__(self, device: str = "cuda", transformer=True):
-        super().__init__(from_pretrained=True)
+    def __init__(self, device: str = "cuda", transformer=True,load_weights=True):
+        super().__init__(from_pretrained=load_weights)
         self.device = torch.device(device)
         self.to(self.device)
 

@@ -1,6 +1,6 @@
 #!/bin/sh
 ### LSF Queue Options
-#BSUB -q gpua100
+#BSUB -q gpuv100
 #BSUB -J geoclip_zeroshot
 #BSUB -n 4
 #BSUB -R "span[hosts=1]"
