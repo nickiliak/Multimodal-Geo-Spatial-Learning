@@ -39,8 +39,15 @@ Thumbs.db
 CLAUDE.md
 
 
-# training artifacts
-checkpoints/
+# Model weights — too large for git (300–500 MB each), live on HPC only
+checkpoints/**/*.pt
+# Keep all result metadata — small, essential for team visibility
+!checkpoints/
+!checkpoints/*/
+!checkpoints/**/*.json
+!checkpoints/**/*.csv
+!checkpoints/**/*.yaml
+!checkpoints/**/*.md
 
 # accidental shell/terminal junk
 *.tmp

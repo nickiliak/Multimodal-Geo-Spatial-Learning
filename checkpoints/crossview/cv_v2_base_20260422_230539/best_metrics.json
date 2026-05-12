@@ -1,0 +1,20 @@
+{
+  "epoch": 30,
+  "selection_metric": "g2s_recall@1",
+  "score": 0.176,
+  "metrics": {
+    "g2s": {
+      "recall@1": 0.176,
+      "recall@5": 0.334,
+      "recall@10": 0.422,
+      "map@1000": 0.25498797060772094
+    },
+    "s2g": {
+      "recall@1": 0.052,
+      "recall@5": 0.144,
+      "recall@10": 0.187,
+      "map@1000": 0.026602257770767426
+    }
+  },
+  "ckpt_path": "checkpoints/crossview/cv_v2_base_20260422_230539/best.pt"
+}
