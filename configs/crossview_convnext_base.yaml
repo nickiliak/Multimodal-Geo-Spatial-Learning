@@ -1,45 +1,48 @@
-# Cross-view retrieval — ConvNeXt-Base (Sample4Geo default backbone)
-# Task 5: stronger backbone + longer schedule + higher resolution.
-# Requires V100 32GB (use -R "select[gpu32gb]" in LSF script).
+# Cross-view retrieval — v2 (ConvNeXt-Base, ImageNet-22k pretrained, 224px)
+# This is the exact configuration used for the v2 training run.
+# Backbone: fb_in22k (ImageNet-22k only, no fine-tuning on ImageNet-1k)
+# Resolution: 224px, batch_size=64 — fits 32GB V100 without AMP
+# Eval: pooled (mean-pool K ground images per landmark before retrieval)
+# Results: g2s R@1 = 17.6% (pooled) / ~7.21% (unpooled), epoch 30
 
 data:
   root: "data/MML_Data"
 
 model:
-  backbone: "convnext_base.fb_in22k_ft_in1k_384"   # 88M params
+  backbone: "convnext_base.fb_in22k"   # 88M params, ImageNet-22k only
   embed_dim: 0                          # native 1024
 
 training:
   epochs: 35
-  batch_size: 64          # convnext_base @ 224px on 32GB V100 (256px OOM'd)
-  img_size: 384           # 256px exceeded 32GB at batch 64; revisit with AMP/grad-ckpt
+  batch_size: 64
+  img_size: 224
   lr: 0.0001
   weight_decay: 0.0001
   temperature: 0.07
   learnable_temp: true
-  label_smoothing: 0.1
+  label_smoothing: 0.0
   warmup_epochs: 3
   warmup_start_factor: 0.1
   min_lr_ratio: 0.01
   num_workers: 6
   prefetch_factor: 4
   persistent_workers: true
-  eval_every: 3           # eval every 3 epochs → 12 evals over 35 epochs (~2.5h eval total)
-  eval_batch_size: 384    # 3× faster than 128; no-grad inference fits 32GB easily
+  eval_every: 3
+  eval_batch_size: 384
 
 evaluation:
   recall_ks: [1, 5, 10]
   map_k: 1000
   directions: ["g2s", "s2g"]
   include_index: true
+  pool_queries: true   # original v2 eval used pooling
 
-# Sample4Geo-style hard-negative sampling
 hard_negatives:
   enabled: true
   neighbor_pool: 64
   pool_size: 32
-  iters_per_epoch: null   # null ⇒ N // batch_size
-  gps_epochs: 4           # slightly longer GPS warmup with larger model
+  iters_per_epoch: null
+  gps_epochs: 4
   dss_refresh_every: 1
   dss_embed_batch: 128
 

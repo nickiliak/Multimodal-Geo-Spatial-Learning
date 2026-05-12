@@ -78,6 +78,19 @@ def main() -> None:
              "Directly comparable to Table 2 of the MMLandmarks paper. "
              "[default]",
     )
+    lm_group = parser.add_mutually_exclusive_group()
+    lm_group.add_argument(
+        "--landmark-agg", dest="landmark_agg",
+        choices=["max", "mean"], default="max",
+        help="Score aggregation for per-landmark eval. "
+             "'max': landmark found if any ground image retrieves correctly (default). "
+             "'mean': average similarity across all ground images.",
+    )
+    lm_group.add_argument(
+        "--no-landmark-agg", dest="landmark_agg",
+        action="store_const", const=None,
+        help="Disable per-landmark metrics (per-image only).",
+    )
     parser.add_argument(
         "--output", type=str, default=None,
         help="Optional path to save results as JSON (e.g. eval_results.json)",
@@ -144,6 +157,7 @@ def main() -> None:
         cfg=cfg,
         pool_queries=args.pool_queries,
         norm=norm,
+        landmark_agg=args.landmark_agg,
     )
 
     print(f"\n{'='*60}")

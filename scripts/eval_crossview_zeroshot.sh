@@ -16,13 +16,15 @@ echo "Job started at $(date)"
 echo "Running on $(hostname)"
 nvidia-smi
 
-echo "Protocol: zero-shot (ImageNet-22k pretrained weights only, no MMLandmarks training)"
-echo "Protocol: --no-pool (18,689 individual queries, paper-comparable)"
+echo "Protocol: zero-shot (ImageNet-22k + IN-1k 384px pretrained weights, no MMLandmarks training)"
+echo "Protocol: --no-pool (18,689 individual queries, paper-comparable) + --landmark-agg max (per-landmark)"
 
+mkdir -p eval_results
 uv run python -m mmgeo.crossview.eval \
-    --config configs/crossview_convnext_base.yaml \
+    --config configs/crossview_convnext_base_384_zeroshot.yaml \
     --pretrained-only \
     --no-pool \
-    --output "logs/eval_zeroshot_$(date +%Y%m%d_%H%M%S).json"
+    --landmark-agg max \
+    --output "eval_results/eval_zeroshot_$(date +%Y%m%d_%H%M%S).json"
 
 echo "Job finished at $(date)"

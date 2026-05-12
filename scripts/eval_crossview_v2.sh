@@ -1,28 +1,27 @@
 #!/bin/bash
-#BSUB -J crossview_eval
+#BSUB -J crossview_eval_v2
 #BSUB -q gpuv100
 #BSUB -gpu "num=1:mode=exclusive_process"
 #BSUB -R "select[gpu32gb]"
 #BSUB -n 6
 #BSUB -R "span[hosts=1] rusage[mem=32GB]"
 #BSUB -W 02:00
-#BSUB -o logs/crossview_eval_%J.out
-#BSUB -e logs/crossview_eval_%J.err
+#BSUB -o logs/crossview_eval_v2_%J.out
+#BSUB -e logs/crossview_eval_v2_%J.err
 
-mkdir -p logs
+mkdir -p logs eval_results
 cd ~/Multimodal-Geo-Spatial-Learning
 
 echo "Job started at $(date)"
 echo "Running on $(hostname)"
 nvidia-smi
 
-# Path to the checkpoint to evaluate
+# v2 best checkpoint (ConvNeXt-Base fb_in22k, 224px, epoch 30)
 CKPT="checkpoints/crossview/cv_v2_base_20260422_230539/best.pt"
 
-echo "Evaluating checkpoint: $CKPT"
-echo "Protocol: --no-pool (18,689 individual queries, paper-comparable)"
+echo "Evaluating v2 checkpoint: $CKPT"
+echo "Protocol: --no-pool (18,689 per-image queries) + --landmark-agg max (1,000 per-landmark)"
 
-mkdir -p eval_results
 uv run python -m mmgeo.crossview.eval \
     --config configs/crossview_convnext_base.yaml \
     --checkpoint "$CKPT" \

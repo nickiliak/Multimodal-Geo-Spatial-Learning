@@ -215,6 +215,79 @@ def pool_embeddings_by_landmark(
     return pooled_embeds, pooled_lids
 
 
+def compute_per_landmark_retrieval_metrics(
+    query_embeddings: torch.Tensor,
+    query_lids: np.ndarray,
+    index_embeddings: torch.Tensor,
+    index_lids: np.ndarray,
+    recall_ks: list[int] | None = None,
+    map_k: int = DEFAULT_MAP_K,
+    agg: str = "max",
+) -> dict[str, float]:
+    """Score-space per-landmark retrieval. One result per landmark.
+
+    For each query landmark all its ground-image embeddings are used to
+    compute similarities to every index item. Scores are then aggregated
+    across the K ground images (max or mean), the index is ranked, and
+    Recall@K / mAP@K are computed once per landmark.
+
+    This gives a **fairer** metric than unpooled per-image eval: each of
+    the 1,000 query landmarks contributes exactly one result regardless of
+    how many ground images it has (~18 on average).
+
+    Parameters
+    ----------
+    agg : str
+        ``"max"`` — landmark found if any ground image retrieves correctly.
+        ``"mean"`` — requires consistent evidence across all ground images.
+    """
+    if recall_ks is None:
+        recall_ks = DEFAULT_RECALL_KS
+
+    unique_q_lids = np.unique(query_lids[query_lids != -1])
+    n_landmarks = len(unique_q_lids)
+    if n_landmarks == 0:
+        results = {f"recall@{k}": 0.0 for k in recall_ks}
+        results[f"map@{map_k}"] = 0.0
+        return results
+
+    effective_map_k = min(map_k, len(index_embeddings))
+    index_embeddings = index_embeddings.to(query_embeddings.device)
+
+    hits = {k: 0 for k in recall_ks}
+    ap_sum = 0.0
+    ap_count = 0
+
+    for lid in unique_q_lids:
+        lm_embeds = query_embeddings[query_lids == lid]        # (K, D)
+        sims = lm_embeds @ index_embeddings.T                  # (K, N_idx)
+
+        if agg == "max":
+            agg_sims = sims.max(dim=0).values                  # (N_idx,)
+        else:
+            agg_sims = sims.mean(dim=0)                        # (N_idx,)
+
+        top_idx = agg_sims.topk(effective_map_k).indices.cpu().numpy()
+        retrieved_lids = index_lids[top_idx]
+        relevance = (retrieved_lids == lid).astype(np.float32)
+
+        for k in recall_ks:
+            if relevance[:k].any():
+                hits[k] += 1
+
+        n_rel = relevance.sum()
+        if n_rel > 0:
+            cum_rel = np.cumsum(relevance)
+            positions = np.arange(1, effective_map_k + 1, dtype=np.float32)
+            ap = ((cum_rel / positions) * relevance).sum() / min(n_rel, effective_map_k)
+            ap_sum += ap
+        ap_count += 1
+
+    results = {f"recall@{k}": hits[k] / n_landmarks for k in recall_ks}
+    results[f"map@{effective_map_k}"] = ap_sum / max(ap_count, 1)
+    return results
+
+
 def compute_recall_at_k(
     query_embeds: torch.Tensor,
     query_lids: np.ndarray,
@@ -242,6 +315,7 @@ def evaluate_crossview(
     map_k: int = DEFAULT_MAP_K,
     direction: str = "g2s",
     pool_queries: bool = True,
+    landmark_agg: str | None = None,
 ) -> dict[str, float]:
     """Full cross-view retrieval evaluation pipeline.
 
@@ -266,10 +340,18 @@ def evaluate_crossview(
         retrieval. This follows the MMLandmarks benchmark protocol (all ground
         images per landmark are averaged). Has no effect when each landmark
         already has exactly one query image (e.g. s2g satellite queries).
+    landmark_agg : str or None
+        If set (``"max"`` or ``"mean"``), compute per-landmark metrics via
+        score-space aggregation and append them to the returned dict with
+        ``"lm_"`` prefix. Each of the 1,000 query landmarks counts once
+        regardless of how many ground images it has. ``None`` = skip
+        (default during training to save time).
 
     Returns
     -------
-    dict with keys ``"recall@k"`` for each k, and ``"map@<map_k>"``.
+    dict with keys ``"recall@k"`` for each k, ``"map@<map_k>"``, and
+    optionally ``"lm_recall@k"`` / ``"lm_map@<map_k>"`` when
+    ``landmark_agg`` is set.
     """
     print(f"\n{'='*60}")
     print(f"Evaluating {direction.upper()} retrieval")
@@ -280,6 +362,11 @@ def evaluate_crossview(
     n_raw = len(q_embeds)
     n_unique = len(np.unique(q_lids[q_lids != -1]))
     print(f"  → {n_raw} query embeddings, {n_unique} unique landmarks")
+
+    # Save raw per-image embeddings before optional landmark pooling so that
+    # per-landmark score-agg always works on individual image embeddings.
+    q_embeds_raw = q_embeds
+    q_lids_raw = q_lids.copy()
 
     if pool_queries and n_raw > n_unique:
         q_embeds, q_lids = pool_embeddings_by_landmark(q_embeds, q_lids)
@@ -297,5 +384,20 @@ def evaluate_crossview(
 
     for name, v in metrics.items():
         print(f"  {name}: {v:.4f} ({v*100:.2f}%)")
+
+    # Per-landmark evaluation (score-space aggregation)
+    if landmark_agg is not None:
+        effective_ks = ks if ks is not None else DEFAULT_RECALL_KS
+        lm_metrics = compute_per_landmark_retrieval_metrics(
+            q_embeds_raw, q_lids_raw, idx_embeds, idx_lids,
+            recall_ks=effective_ks, map_k=map_k, agg=landmark_agg,
+        )
+        n_lm = len(np.unique(q_lids_raw[q_lids_raw != -1]))
+        print(f"\n  --- Per-landmark ({landmark_agg}-agg, {n_lm} landmarks) ---")
+        for k in effective_ks:
+            print(f"  recall@{k}: {lm_metrics[f'recall@{k}']:.4f} ({lm_metrics[f'recall@{k}']*100:.2f}%)  [per-landmark]")
+        lm_map_key = next(k for k in lm_metrics if k.startswith("map@"))
+        print(f"  {lm_map_key}: {lm_metrics[lm_map_key]:.4f} ({lm_metrics[lm_map_key]*100:.2f}%)  [per-landmark]")
+        metrics.update({f"lm_{k}": v for k, v in lm_metrics.items()})
 
     return metrics
