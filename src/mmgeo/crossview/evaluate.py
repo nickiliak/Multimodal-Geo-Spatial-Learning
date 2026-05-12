@@ -386,18 +386,21 @@ def evaluate_crossview(
         print(f"  {name}: {v:.4f} ({v*100:.2f}%)")
 
     # Per-landmark evaluation (score-space aggregation)
+    # Always compute both max and mean when landmark_agg is set — embeddings
+    # are already extracted so the extra pass is cheap. Keys: lm_max_* / lm_mean_*
     if landmark_agg is not None:
         effective_ks = ks if ks is not None else DEFAULT_RECALL_KS
-        lm_metrics = compute_per_landmark_retrieval_metrics(
-            q_embeds_raw, q_lids_raw, idx_embeds, idx_lids,
-            recall_ks=effective_ks, map_k=map_k, agg=landmark_agg,
-        )
         n_lm = len(np.unique(q_lids_raw[q_lids_raw != -1]))
-        print(f"\n  --- Per-landmark ({landmark_agg}-agg, {n_lm} landmarks) ---")
-        for k in effective_ks:
-            print(f"  recall@{k}: {lm_metrics[f'recall@{k}']:.4f} ({lm_metrics[f'recall@{k}']*100:.2f}%)  [per-landmark]")
-        lm_map_key = next(k for k in lm_metrics if k.startswith("map@"))
-        print(f"  {lm_map_key}: {lm_metrics[lm_map_key]:.4f} ({lm_metrics[lm_map_key]*100:.2f}%)  [per-landmark]")
-        metrics.update({f"lm_{k}": v for k, v in lm_metrics.items()})
+        for agg in ["max", "mean"]:
+            lm_metrics = compute_per_landmark_retrieval_metrics(
+                q_embeds_raw, q_lids_raw, idx_embeds, idx_lids,
+                recall_ks=effective_ks, map_k=map_k, agg=agg,
+            )
+            print(f"\n  --- Per-landmark ({agg}-agg, {n_lm} landmarks) ---")
+            for k in effective_ks:
+                print(f"  recall@{k}: {lm_metrics[f'recall@{k}']:.4f} ({lm_metrics[f'recall@{k}']*100:.2f}%)  [per-landmark {agg}]")
+            lm_map_key = next(k for k in lm_metrics if k.startswith("map@"))
+            print(f"  {lm_map_key}: {lm_metrics[lm_map_key]:.4f} ({lm_metrics[lm_map_key]*100:.2f}%)  [per-landmark {agg}]")
+            metrics.update({f"lm_{agg}_{k}": v for k, v in lm_metrics.items()})
 
     return metrics
