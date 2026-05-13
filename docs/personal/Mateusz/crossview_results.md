@@ -18,7 +18,25 @@ For each of the **1,000** query landmarks, all K ground-image embeddings are use
 
 ## Results
 
-### Ground → Satellite (g2s)
+### Ground → Satellite (g2s) — Master Table
+
+All three eval protocols side-by-side. Columns: per-image (img), per-landmark mean-agg (mean), per-landmark max-agg (max).
+
+| Model | R@1 img | R@1 mean | R@1 attn | R@1 max | R@5 img | R@5 mean | R@5 max | R@10 img | R@10 mean | R@10 max | mAP img | mAP mean | mAP max |
+|-------|---------|----------|----------|---------|---------|----------|---------|----------|-----------|----------|---------|----------|---------|
+| Zero-shot | 0.34% | 0.40% | TBD | 0.30% | 1.23% | 1.20% | 0.90% | 2.14% | 1.80% | 2.10% | 1.00% | 0.89% | 0.89% |
+| v2 (ep30) | 7.21% | 17.60% | TBD | **9.00%** | 18.52% | 33.40% | 20.30% | 25.31% | **42.20%** | 27.20% | 13.10% | 25.50% | 15.21% |
+| v3 (ep36) | **8.58%** | 18.40% | TBD | 7.10% | 18.13% | 31.70% | 14.90% | 22.29% | 37.20% | 18.80% | 13.25% | 25.12% | 11.10% |
+| v4 (ep36) | 7.63% | **18.50%** | TBD | 8.10% | **19.02%** | **32.40%** | 18.50% | 24.57% | 39.60% | 25.30% | **13.34%** | **25.33%** | 13.72% |
+
+*per-image* = each of 18,688 ground images is an independent query (paper-comparable).
+*mean-agg* = 1,000 landmarks, average score across all ground photos (team primary; ≡ embedding-space mean-pooling for ranking).
+*attn* = attention-weighted mean: photos weighted by cosine-sim to landmark centre (pending HPC eval).
+*max-agg* = 1,000 landmarks, best score across all ground photos (upper bound on landmark coverage).
+
+---
+
+### Ground → Satellite (g2s) — Detailed Breakdown
 
 Per-image eval (18,688 queries) — paper-comparable:
 
@@ -31,22 +49,35 @@ Per-image eval (18,688 queries) — paper-comparable:
 | MMCLIP† | CLIP ViT-L | — | zero-shot | 20.5% | — | — | — | no MML training |
 | GeoClip† | CLIP ViT-L + geo | — | zero-shot | 21.1% | — | — | — | no MML training |
 
-Per-landmark eval (1,000 landmarks) — fairer measure:
+Per-landmark eval (1,000 landmarks) — fairer measure.
+Each landmark counts once regardless of photo count.
 
-| Model | lm_max R@1 | lm_max R@5 | lm_max R@10 | lm_mean R@1 | mAP@1k |
-|-------|-----------|-----------|------------|------------|--------|
-| Zero-shot | 0.30% | 0.90% | 2.10% | 0.40% | 0.89% |
-| v2 (ep30) | **9.00%** | 20.30% | 27.20% | 17.60% | 15.21% |
-| v3 (ep36) | 7.10% | 14.90% | 18.80% | 18.40% | 11.10% |
-| v4 (ep36) | 8.10% | 18.50% | 25.30% | 18.50% | 13.72% |
+**Max-agg** ("any photo wins" — upper bound on landmark coverage):
 
-**Per-lm max ranking (v2 > v4 > v3) is the reverse of per-image ranking (v3 > v4 > v2).** This is the key ablation finding — see Key Takeaways.
+| Model | R@1 | R@5 | R@10 | mAP@1k |
+|-------|-----|-----|------|--------|
+| Zero-shot | 0.30% | 0.90% | 2.10% | 0.89% |
+| v2 (ep30) | **9.00%** | 20.30% | 27.20% | 15.21% |
+| v3 (ep36) | 7.10% | 14.90% | 18.80% | 11.10% |
+| v4 (ep36) | 8.10% | 18.50% | 25.30% | 13.72% |
+
+**Mean-agg** ("average score across all photos" — what the team uses; mathematically equivalent to mean-pooling embeddings):
+
+| Model | R@1 | R@5 | R@10 | mAP@1k |
+|-------|-----|-----|------|--------|
+| Zero-shot | 0.40% | 1.20% | 1.80% | 0.89% |
+| v2 (ep30) | 17.60% | 33.40% | **42.20%** | 25.50% |
+| v3 (ep36) | 18.40% | 31.70% | 37.20% | 25.12% |
+| v4 (ep36) | **18.50%** | **32.40%** | 39.60% | **25.33%** |
+
+Mean-agg: v4 ≈ v3 > v2. Max-agg (landmark coverage): v2 > v4 > v3 — reversed.
+Note: s2g per-lm max = per-lm mean (one satellite per landmark), shown in s2g table below.
 
 > † MMCLIP/GeoClip are zero-shot — never trained on MMLandmarks. Not a fair direct comparison with our trained models.
 
 ### Satellite → Ground (s2g)
 
-Per-image eval:
+Per-image eval (= per-landmark for s2g — one satellite per landmark, nothing to aggregate):
 
 | Model | R@1 | R@5 | R@10 | mAP@1k |
 |-------|-----|-----|------|--------|
@@ -55,7 +86,7 @@ Per-image eval:
 | v3 (ep36) | **5.40%** | 11.10% | 13.70% | 1.85% |
 | v4 (ep36) | 4.00% | 11.30% | 16.80% | 2.12% |
 
-Note: s2g per-lm max = per-lm mean (one satellite per landmark, nothing to aggregate).
+(Per-lm numbers match per-image exactly; s2g has one satellite query per landmark.)
 
 ---
 

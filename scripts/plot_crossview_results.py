@@ -1,6 +1,6 @@
 """Plot cross-view retrieval results.
 
-Generates two figures saved to docs/personal/Mateusz/figures/:
+Generates three figures saved to docs/personal/Mateusz/figures/:
 
 Figure 1 — Model comparison bar chart (g2s Recall@1, per-image)
   Two groups: MMLandmarks-trained models vs. zero-shot CLIP-based models.
@@ -10,9 +10,12 @@ Figure 2 — v3 training progression (g2s and s2g Recall@1 vs epoch)
   4 eval checkpoints: epoch 9, 18, 27, 36.
   Dashed reference line at v2 unpooled R@1 = 7.21%.
 
+Figure 3 — Per-image vs Per-landmark comparison (all three: per-image, max, mean)
+  Shows the reversal: v3 wins per-image but v2 wins max-agg;
+  v4 ≈ v3 on mean-agg (team primary metric).
+
 Usage
 -----
-# After running eval jobs, update PER_LANDMARK dict below and re-run:
 python scripts/plot_crossview_results.py
 
 # Save to a different output directory:
@@ -36,19 +39,38 @@ import numpy as np
 
 # Per-image Recall@1 (unpooled, g2s)
 PER_IMAGE = {
-    "Zero-shot": 0.25,
-    "v2": 7.21,
-    "v3": 8.58,
-    "v4": None,       # fill in after v4 training + eval
+    "Zero-shot": 0.34,
+    "v2 (ep30)": 7.21,
+    "v3 (ep36)": 8.58,
+    "v4 (ep36)": 7.63,
 }
 
-# Per-landmark Recall@1 (max-agg, g2s) — update after eval jobs
-PER_LANDMARK = {
-    "Zero-shot": None,   # fill from eval_results_zeroshot.json
-    "v2":        None,   # fill from eval_results_v2.json
-    "v3":        None,   # fill from eval_results_v3.json
-    "v4":        None,   # fill after v4 training + eval
+# Per-landmark max-agg Recall@1 (g2s) — "any photo wins"
+PER_LM_MAX = {
+    "Zero-shot": 0.30,
+    "v2 (ep30)": 9.00,
+    "v3 (ep36)": 7.10,
+    "v4 (ep36)": 8.10,
 }
+
+# Per-landmark mean-agg Recall@1 (g2s) — team primary metric (= embedding-space mean pool)
+PER_LM_MEAN = {
+    "Zero-shot": 0.40,
+    "v2 (ep30)": 17.60,
+    "v3 (ep36)": 18.40,
+    "v4 (ep36)": 18.50,
+}
+
+# Per-landmark attention-weighted mean Recall@1 (g2s) — fill after HPC eval
+PER_LM_ATTN = {
+    "Zero-shot": None,   # fill from lm_attn_recall@1 in eval JSON
+    "v2 (ep30)": None,
+    "v3 (ep36)": None,
+    "v4 (ep36)": None,
+}
+
+# Keep legacy alias for backward compat
+PER_LANDMARK = PER_LM_MAX
 
 # Paper zero-shot baselines (CLIP-based, never trained on MMLandmarks)
 PAPER_BASELINES = {
@@ -117,7 +139,7 @@ def fig1_comparison(out_dir: Path) -> None:
              "† Zero-shot models never trained on MMLandmarks — different experimental condition.",
              ha="right", va="bottom", fontsize=7, color="gray", style="italic")
 
-    plt.tight_layout()
+    fig.subplots_adjust(bottom=0.18)
     out_path = out_dir / "fig1_model_comparison.png"
     fig.savefig(out_path, dpi=150, bbox_inches="tight")
     plt.close(fig)
@@ -162,42 +184,56 @@ def fig2_v3_progression(out_dir: Path) -> None:
 
 
 # ---------------------------------------------------------------------------
-# Figure 3 — Per-image vs Per-landmark comparison (fill in once eval runs)
+# Figure 3 — Per-image vs Per-landmark max vs Per-landmark mean
 # ---------------------------------------------------------------------------
 
 def fig3_per_landmark(out_dir: Path) -> None:
-    """Bar chart comparing per-image vs per-landmark Recall@1.
+    """Bar chart: per-image / per-lm max / per-lm mean / per-lm attn Recall@1 (g2s).
 
-    Only rendered once per-landmark numbers are available; skipped otherwise.
+    Highlights the reversal: v3 leads per-image; v2 leads max-agg;
+    v4 ≈ v3 leads mean-agg (team primary). Attn bar shown when available.
     """
-    models_with_both = [k for k in PER_IMAGE if PER_IMAGE.get(k) is not None and PER_LANDMARK.get(k) is not None]
-    if not models_with_both:
-        print("Skipping Figure 3: per-landmark eval results not yet available. "
-              "Update PER_LANDMARK dict and re-run.")
-        return
+    models = list(PER_IMAGE.keys())
+    img_vals  = [PER_IMAGE[m]   for m in models]
+    max_vals  = [PER_LM_MAX[m]  for m in models]
+    mean_vals = [PER_LM_MEAN[m] for m in models]
 
-    img_vals = [PER_IMAGE[m] for m in models_with_both]
-    lm_vals = [PER_LANDMARK[m] for m in models_with_both]
+    has_attn = all(PER_LM_ATTN.get(m) is not None for m in models)
+    attn_vals = [PER_LM_ATTN[m] for m in models] if has_attn else None
 
-    x = np.arange(len(models_with_both))
-    width = 0.35
-    fig, ax = plt.subplots(figsize=(8, 4.5))
+    n_groups = 4 if has_attn else 3
+    width = 0.8 / n_groups
+    offsets = np.linspace(-(n_groups - 1) / 2, (n_groups - 1) / 2, n_groups) * width
 
-    bars1 = ax.bar(x - width / 2, img_vals, width, label="Per-image (18,688 queries)", color="#4C72B0", edgecolor="white")
-    bars2 = ax.bar(x + width / 2, lm_vals, width, label="Per-landmark (1,000 landmarks, max-agg)", color="#DD8452", edgecolor="white")
+    x = np.arange(len(models))
+    fig, ax = plt.subplots(figsize=(11, 5))
 
-    for bar, val in zip(list(bars1) + list(bars2), img_vals + lm_vals):
+    bars1 = ax.bar(x + offsets[0], img_vals,  width, label="Per-image (18,688 queries)",          color="#4C72B0", edgecolor="white")
+    bars2 = ax.bar(x + offsets[1], max_vals,  width, label="Per-lm max (any photo wins)",          color="#DD8452", edgecolor="white")
+    bars3 = ax.bar(x + offsets[2], mean_vals, width, label="Per-lm mean (team primary)",           color="#55A868", edgecolor="white")
+    all_bars = list(bars1) + list(bars2) + list(bars3)
+    all_vals = img_vals + max_vals + mean_vals
+
+    if has_attn:
+        bars4 = ax.bar(x + offsets[3], attn_vals, width, label="Per-lm attn-weighted mean",       color="#8172B3", edgecolor="white")
+        all_bars += list(bars4)
+        all_vals += attn_vals
+
+    for bar, val in zip(all_bars, all_vals):
         ax.text(bar.get_x() + bar.get_width() / 2, val + 0.3, f"{val:.1f}%",
-                ha="center", va="bottom", fontsize=8)
+                ha="center", va="bottom", fontsize=7)
 
     ax.set_xticks(x)
-    ax.set_xticklabels(models_with_both, fontsize=11)
+    ax.set_xticklabels(models, fontsize=11)
     ax.set_ylabel("g2s Recall@1 (%)", fontsize=12)
-    ax.set_title("Per-Image vs Per-Landmark Evaluation (g2s R@1)", fontsize=13, pad=10)
+    title = "Per-Image vs Per-Landmark Recall@1 (g2s) — All Eval Protocols"
+    if not has_attn:
+        title += " (attn pending HPC)"
+    ax.set_title(title, fontsize=12, pad=10)
     ax.spines[["top", "right"]].set_visible(False)
-    ax.legend(frameon=False, fontsize=9)
+    ax.legend(frameon=False, fontsize=8)
 
-    plt.tight_layout()
+    fig.subplots_adjust(bottom=0.12)
     out_path = out_dir / "fig3_per_landmark_comparison.png"
     fig.savefig(out_path, dpi=150, bbox_inches="tight")
     plt.close(fig)
@@ -224,7 +260,6 @@ def main() -> None:
     fig3_per_landmark(out_dir)
 
     print(f"\nAll figures saved to: {out_dir.resolve()}")
-    print("To update per-landmark numbers: edit PER_LANDMARK dict in this script and re-run.")
 
 
 if __name__ == "__main__":

@@ -238,8 +238,19 @@ def compute_per_landmark_retrieval_metrics(
     Parameters
     ----------
     agg : str
-        ``"max"`` — landmark found if any ground image retrieves correctly.
-        ``"mean"`` — requires consistent evidence across all ground images.
+        ``"max"``  — landmark found if any ground image retrieves correctly.
+        ``"mean"`` — requires consistent evidence across all ground images
+                  (score-space mean; equivalent to embedding-space mean-pool
+                  for ranking metrics, since the two differ only by a positive
+                  scalar that is constant across all gallery items).
+        ``"attn"`` — attention-weighted mean: compute the landmark's mean
+                  embedding, weight each photo by its cosine similarity to
+                  that mean (softmax-normalised), then query with the
+                  weighted-sum embedding. Outlier photos (low similarity to
+                  the landmark centre) receive low weight, downweighting
+                  noise that would otherwise corrupt simple mean-agg.
+                  Genuinely different from mean-agg: non-uniform weights
+                  break the score-space / embedding-space equivalence.
     """
     if recall_ks is None:
         recall_ks = DEFAULT_RECALL_KS
@@ -264,6 +275,19 @@ def compute_per_landmark_retrieval_metrics(
 
         if agg == "max":
             agg_sims = sims.max(dim=0).values                  # (N_idx,)
+        elif agg == "attn":
+            # Attention-weighted mean.
+            # lm_embeds are already L2-normalised → dot product = cosine sim.
+            mean_embed = F.normalize(
+                lm_embeds.mean(dim=0, keepdim=True), dim=1
+            )                                                   # (1, D)
+            weights = F.softmax(
+                lm_embeds @ mean_embed.T, dim=0
+            )                                                   # (K, 1)
+            attn_embed = F.normalize(
+                (weights * lm_embeds).sum(dim=0, keepdim=True), dim=1
+            )                                                   # (1, D)
+            agg_sims = (attn_embed @ index_embeddings.T).squeeze(0)  # (N_idx,)
         else:
             agg_sims = sims.mean(dim=0)                        # (N_idx,)
 
@@ -391,7 +415,7 @@ def evaluate_crossview(
     if landmark_agg is not None:
         effective_ks = ks if ks is not None else DEFAULT_RECALL_KS
         n_lm = len(np.unique(q_lids_raw[q_lids_raw != -1]))
-        for agg in ["max", "mean"]:
+        for agg in ["max", "mean", "attn"]:
             lm_metrics = compute_per_landmark_retrieval_metrics(
                 q_embeds_raw, q_lids_raw, idx_embeds, idx_lids,
                 recall_ks=effective_ks, map_k=map_k, agg=agg,

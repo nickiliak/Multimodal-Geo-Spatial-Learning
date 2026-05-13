@@ -257,9 +257,35 @@ the K×N_gallery similarity matrix. Aggregate K score vectors into one ranked li
   each landmark contributes exactly one vote regardless of how many photos it has.
   More conservative than max, requires consistent evidence.
 
-Both are computed in one eval pass. Each of the 1,000 landmarks counts exactly once.
+All three are computed in one eval pass. Each of the 1,000 landmarks counts exactly once.
 This is the **fairer metric** — a landmark with 2 photos and one with 18 photos both
-count equally. Reported as `lm_max_recall@k` and `lm_mean_recall@k` in eval JSONs.
+count equally. Reported as `lm_max_recall@k`, `lm_mean_recall@k`, `lm_attn_recall@k`.
+
+- **max-agg** (`lm_max_recall@k`): `agg_score[j] = max over k of sim(ground_k, sat_j)`.
+  Found if any photo succeeds. Upper bound on landmark coverage.
+- **mean-agg** (`lm_mean_recall@k`): `agg_score[j] = mean over k`. Every photo counts equally.
+- **attn-weighted mean** (`lm_attn_recall@k`): weight each photo by its cosine similarity
+  to the landmark's mean embedding (softmax-normalised), then query with the weighted-sum
+  embedding. Outlier photos (low similarity to the landmark centre) get low weight.
+
+**Why mean-agg = embedding-space mean pooling (proof):**
+
+For L2-normalised embeddings e_k and gallery items s_j:
+
+```
+score-space mean:      score(s_j) = (1/K) Σ_k (e_k · s_j) = avg_embed · s_j
+embedding-space pool:  score(s_j) = normalize(avg_embed) · s_j
+```
+
+These differ only by `||avg_embed||` — a positive constant that is the same for every
+gallery item. Therefore the **ranking is identical** → same R@K and mAP. Our `lm_mean`
+IS embedding-space mean pooling for all ranking-based metrics.
+
+**Why attn-weighted mean is genuinely different from mean-agg:**
+
+With non-uniform weights w_k (from softmax), `Σ w_k e_k ≠ c · avg_embed` in general.
+The scalar-equivalence argument breaks. Attention can produce a genuinely different
+ranking by downweighting photos that pull the landmark embedding toward wrong satellites.
 
 **Note on expected numbers:** per-landmark max recall is generally higher than per-image
 recall, because max-agg gives a landmark a chance to succeed with its best photo. However
@@ -439,6 +465,19 @@ algorithmic improvements (n_ground=2, label_smooth=0.1). No AMP needed.
 
 ## 10. Results Summary
 
+### g2s — Master Table (all protocols side-by-side)
+
+Columns: per-image (img), per-landmark mean-agg (mean, team primary), per-landmark max-agg (max), attention-weighted mean (attn, pending HPC).
+
+| Model | R@1 img | R@1 mean | R@1 max | R@1 attn | R@5 img | R@5 mean | R@5 max | R@10 img | R@10 mean | R@10 max | mAP img | mAP mean | mAP max |
+|-------|---------|----------|---------|----------|---------|----------|---------|----------|-----------|----------|---------|----------|---------|
+| Zero-shot | 0.34% | 0.40% | 0.30% | TBD | 1.23% | 1.20% | 0.90% | 2.14% | 1.80% | 2.10% | 1.00% | 0.89% | 0.89% |
+| v2 (ep30) | 7.21% | 17.60% | **9.00%** | TBD | 18.52% | 33.40% | 20.30% | 25.31% | **42.20%** | 27.20% | 13.10% | 25.50% | 15.21% |
+| v3 (ep36) | **8.58%** | 18.40% | 7.10% | TBD | 18.13% | 31.70% | 14.90% | 22.29% | 37.20% | 18.80% | 13.25% | 25.12% | 11.10% |
+| v4 (ep36) | 7.63% | **18.50%** | 8.10% | TBD | **19.02%** | **32.40%** | 18.50% | 24.57% | 39.60% | 25.30% | **13.34%** | **25.33%** | 13.72% |
+
+*attn = attention-weighted mean (new protocol, pending HPC eval run)*
+
 ### Per-image (unpooled, paper-comparable) — g2s
 
 | Model | Backbone | img_size | Epochs | R@1 | R@5 | mAP@1k |
@@ -452,28 +491,40 @@ algorithmic improvements (n_ground=2, label_smooth=0.1). No AMP needed.
 
 † zero-shot on MMLandmarks — never trained on this dataset. Not a direct comparison.
 
-### Per-landmark max-agg — g2s (1,000 landmarks, fairest metric)
+### Per-landmark max-agg — g2s ("any photo wins", upper bound on landmark coverage)
 
-| Model | lm_max R@1 | lm_max R@5 | lm_max R@10 | lm_mean R@1 |
-|-------|-----------|-----------|------------|------------|
-| Zero-shot | 0.30% | 0.90% | 2.10% | 0.40% |
-| v2 (ep30) | **9.00%** | 20.30% | 27.20% | 17.60% |
-| v3 (ep36) | 7.10% | 14.90% | 18.80% | 18.40% |
-| v4 (ep36) | 8.10% | 18.50% | 25.30% | 18.50% |
+| Model | R@1 | R@5 | R@10 | mAP@1k |
+|-------|-----|-----|------|--------|
+| Zero-shot | 0.30% | 0.90% | 2.10% | 0.89% |
+| v2 (ep30) | **9.00%** | 20.30% | 27.20% | 15.21% |
+| v3 (ep36) | 7.10% | 14.90% | 18.80% | 11.10% |
+| v4 (ep36) | 8.10% | 18.50% | 25.30% | 13.72% |
 
-**Key: per-lm max ranking (v2 > v4 > v3) is opposite to per-image ranking (v3 > v4 > v2).**
-v3 has the best headline number but identifies the fewest distinct locations.
+**Max-agg ranking: v2 > v4 > v3 — opposite to per-image.**
+v3 has the best per-image headline but identifies the fewest distinct locations.
 
-### Per-image — s2g
+### Per-landmark mean-agg — g2s ("average score across all photos" — team primary metric)
 
-| Model | R@1 | R@5 | R@10 |
-|-------|-----|-----|------|
-| Zero-shot | 0.00% | 0.30% | 0.80% |
-| v2 (ep30) | 5.20% | 14.40% | 18.70% |
-| v3 (ep36) | **5.40%** | 11.10% | 13.70% |
-| v4 (ep36) | 4.00% | 11.30% | 16.80% |
+Mathematically equivalent to embedding-space mean-pooling for L2-normalized vectors.
 
-Note: s2g per-lm max = per-lm mean (one satellite per landmark, nothing to aggregate).
+| Model | R@1 | R@5 | R@10 | mAP@1k |
+|-------|-----|-----|------|--------|
+| Zero-shot | 0.40% | 1.20% | 1.80% | 0.89% |
+| v2 (ep30) | 17.60% | 33.40% | 42.20% | 25.50% |
+| v3 (ep36) | 18.40% | 31.70% | 37.20% | 25.12% |
+| v4 (ep36) | **18.50%** | **32.40%** | **39.60%** | **25.33%** |
+
+**Mean-agg ranking: v4 ≈ v3 > v2.** v4 is marginally the best on mean-agg (18.50% vs 18.40%).
+This is the metric to report to the team and for the poster.
+
+### s2g — Per-image (= per-landmark; one satellite per landmark)
+
+| Model | R@1 | R@5 | R@10 | mAP@1k |
+|-------|-----|-----|------|--------|
+| Zero-shot | 0.00% | 0.30% | 0.80% | 0.05% |
+| v2 (ep30) | 5.20% | 14.40% | 18.70% | 2.66% |
+| v3 (ep36) | **5.40%** | 11.10% | 13.70% | 1.85% |
+| v4 (ep36) | 4.00% | 11.30% | 16.80% | 2.12% |
 
 ### Mean-agg equivalence to pooled
 
@@ -569,6 +620,24 @@ slightly reduced per-lm max because n_ground=2 means the batch only sees 32 uniq
 landmarks per step instead of 64. The dominant factor for landmark coverage is the number
 of unique landmarks (= InfoNCE negatives) per training step — not the backbone quality,
 not the resolution, not multi-positive training.
+
+**Q: Is averaging scores (score-space mean) the same as averaging embeddings (embedding-space mean pool)?**
+For ranking metrics (R@K, mAP) — yes, identical. Score-space mean gives
+`score(s_j) = avg_embed · s_j`; embedding-space mean pool gives
+`score(s_j) = normalize(avg_embed) · s_j`. They differ by `||avg_embed||`, which is
+a positive constant the same for every gallery item, so the ranking and all top-K metrics
+are identical. Our `lm_mean` result IS what you would get from embedding-space mean pooling.
+
+**Q: Why does attention-weighted mean differ from simple mean, if both produce a single query embedding?**
+Simple mean weights all K photos equally: `embed = normalize(Σ e_k / K)`. Because the
+weight is uniform (1/K for every photo), the weighted sum is just a scaled version of
+the mean embedding, and the ranking is identical to score-space mean.
+Attention breaks this symmetry: `w_k = softmax(e_k · mean_embed)`, so representative
+photos get higher weight and outlier photos get lower weight. Now `Σ w_k e_k` is NOT
+proportional to the mean embedding in general, and the ranking can genuinely change.
+Practically the improvement over simple mean is small when K is large (many photos →
+mean already robust) but can matter for landmarks with only 2–3 photos where one bad
+photo strongly influences the mean.
 
 ---
 
