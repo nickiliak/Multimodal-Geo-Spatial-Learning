@@ -12,7 +12,7 @@ Each of the **18,688** ground query images is an independent query. A landmark w
 ### Per-landmark (score-space aggregation) — fairer
 For each of the **1,000** query landmarks, all K ground-image embeddings are used to compute similarities to every index item. The K score vectors are aggregated (max or mean), then ranked once. Every landmark counts exactly once regardless of how many photos it has. `max` aggregation = "success if any ground image retrieves correctly."
 
-> Per-landmark recall is higher than per-image recall because a landmark can succeed even if only its best photo matches — which is a valid and useful measure.
+> **Note:** per-landmark max recall is generally higher than per-image recall. However v3 is an exception — per-lm max (7.10%) < per-image (8.58%) — because v3's gains are concentrated in easy, high-photo-count landmarks. When each landmark counts once, v3 identifies fewer distinct locations than v2 (9.00%). See Key Takeaways.
 
 ---
 
@@ -24,21 +24,23 @@ Per-image eval (18,688 queries) — paper-comparable:
 
 | Model | Backbone | img_size | Epochs | R@1 | R@5 | R@10 | mAP@1k | Notes |
 |-------|----------|----------|--------|-----|-----|------|--------|-------|
-| Zero-shot | ConvNeXt-B (fb_in22k) | 384 | 0 | 0.25% | 0.76% | 1.13% | 0.59% | ImageNet weights only |
-| v2 | ConvNeXt-B (fb_in22k) | 224 | 35 | 7.21% | 18.52% | 25.31% | 13.10% | ep30 best |
-| v3 | ConvNeXt-B (fb_in22k_ft_1k_384) | 384 | 36 | **8.58%** | 18.13% | 22.29% | 13.25% | ep36 best |
-| v4 | ConvNeXt-B (fb_in22k) | 224 | 36 | TBD | TBD | TBD | TBD | planned |
+| Zero-shot | ConvNeXt-B (fb_in22k_ft_1k_384) | 384 | 0 | 0.34% | 1.23% | 2.14% | 1.00% | ImageNet weights only |
+| v2 (ep30) | ConvNeXt-B (fb_in22k) | 224 | 35 | 7.21% | 18.52% | 25.31% | 13.10% | ep30 best |
+| v3 (ep36) | ConvNeXt-B (fb_in22k_ft_1k_384) | 384 | 36 | **8.58%** | 18.13% | 22.29% | 13.25% | ep36 best |
+| v4 (ep36) | ConvNeXt-B (fb_in22k) | 224 | 36 | 7.63% | 19.02% | 24.57% | 13.34% | ep36 best |
 | MMCLIP† | CLIP ViT-L | — | zero-shot | 20.5% | — | — | — | no MML training |
 | GeoClip† | CLIP ViT-L + geo | — | zero-shot | 21.1% | — | — | — | no MML training |
 
-Per-landmark eval (1,000 landmarks, max-agg) — fairer measure:
+Per-landmark eval (1,000 landmarks) — fairer measure:
 
-| Model | R@1 | R@5 | R@10 | mAP@1k | Notes |
-|-------|-----|-----|------|--------|-------|
-| Zero-shot | TBD | TBD | TBD | TBD | run: `eval_crossview_zeroshot.sh` |
-| v2 | TBD | TBD | TBD | TBD | run: `eval_crossview_v2.sh` |
-| v3 | TBD | TBD | TBD | TBD | run: `eval_crossview_v3.sh` |
-| v4 | TBD | TBD | TBD | TBD | after v4 training |
+| Model | lm_max R@1 | lm_max R@5 | lm_max R@10 | lm_mean R@1 | mAP@1k |
+|-------|-----------|-----------|------------|------------|--------|
+| Zero-shot | 0.30% | 0.90% | 2.10% | 0.40% | 0.89% |
+| v2 (ep30) | **9.00%** | 20.30% | 27.20% | 17.60% | 15.21% |
+| v3 (ep36) | 7.10% | 14.90% | 18.80% | 18.40% | 11.10% |
+| v4 (ep36) | 8.10% | 18.50% | 25.30% | 18.50% | 13.72% |
+
+**Per-lm max ranking (v2 > v4 > v3) is the reverse of per-image ranking (v3 > v4 > v2).** This is the key ablation finding — see Key Takeaways.
 
 > † MMCLIP/GeoClip are zero-shot — never trained on MMLandmarks. Not a fair direct comparison with our trained models.
 
@@ -48,10 +50,12 @@ Per-image eval:
 
 | Model | R@1 | R@5 | R@10 | mAP@1k |
 |-------|-----|-----|------|--------|
-| Zero-shot | ~0% | ~0% | ~0% | ~0% |
+| Zero-shot | 0.00% | 0.30% | 0.80% | 0.05% |
 | v2 (ep30) | 5.20% | 14.40% | 18.70% | 2.66% |
 | v3 (ep36) | **5.40%** | 11.10% | 13.70% | 1.85% |
-| v4 | TBD | TBD | TBD | TBD |
+| v4 (ep36) | 4.00% | 11.30% | 16.80% | 2.12% |
+
+Note: s2g per-lm max = per-lm mean (one satellite per landmark, nothing to aggregate).
 
 ---
 
@@ -87,11 +91,11 @@ ConvNeXt-Base (fb_in22k_ft_in1k_384), 384px, 36 epochs. Multi-positive InfoNCE (
 - g2s R@1 = **8.58%** (unpooled, ep36)
 - Δ vs v2: +1.37% from combined backbone+resolution+loss changes
 
-### v4 — Ablation: algorithmic improvements only (planned)
+### v4 — Ablation: algorithmic improvements only (complete)
 ConvNeXt-Base (fb_in22k), 224px, 36 epochs. Multi-positive InfoNCE (K=2), label smoothing 0.1 — same as v3. Backbone and resolution same as v2. No AMP needed at 224px (fits 32GB at batch=64).
 - Purpose: isolate the effect of multi-positive + label smoothing, separate from backbone/resolution
-- v2→v4 = algorithmic only; v4→v3 = architectural only
-- Expected: ~8–10% g2s R@1
+- v2→v4 = algorithmic only (+0.42% per-image); v4→v3 = architectural only (+0.95% per-image)
+- g2s R@1 = **7.63%** (per-image, ep36), per-lm max = **8.10%**
 
 ---
 
@@ -109,33 +113,35 @@ ConvNeXt-Base (fb_in22k), 224px, 36 epochs. Multi-positive InfoNCE (K=2), label 
 
 ## Key Takeaways
 
-1. **Domain training is essential.** Zero-shot = 0.25% → fine-tuned v3 = 8.58% (~34×). General visual features are not sufficient for cross-view retrieval.
+1. **Domain training is essential.** Zero-shot = 0.34% → fine-tuned best = 8.58% (~25×). General visual features are not sufficient for cross-view retrieval.
 
-2. **v3 outperforms v2 by +1.37% R@1.** Likely driven by higher resolution (384px matching the backbone's pretraining) and multi-positive loss. v4 will isolate which change matters more.
+2. **v4 ablation reveals what drives the v2→v3 gain.** v4 (same backbone/res as v2, adds multi-positive + label smoothing) gives 7.63% — between v2 (7.21%) and v3 (8.58%). Both algorithmic (+0.42%) and architectural (+0.95%) changes contribute.
 
-3. **Hard negatives are the main driver.** GPS → DSS transition causes a temporary loss spike (task suddenly harder), then steady improvement. Batch accuracy: ~49% → 93.5% over training.
+3. **Per-image and per-landmark rankings are opposite.** Per-lm max: v2 (9.00%) > v4 (8.10%) > v3 (7.10%). Every change made per-landmark coverage worse. The dominant factor is the number of unique landmarks (InfoNCE negatives) per training step: v2 batch=64 → 63 negatives; v4 batch=64 n_ground=2 → 32 unique landmarks; v3 batch=16 → 15 negatives. More negatives per step = broader, more uniform landmark coverage.
 
-4. **CLIP backbone gap is large.** MMCLIP/GeoClip reach 20–21% zero-shot with CLIP ViT-L. Our trained ConvNeXt reaches 8.58%. The gap is almost entirely explained by backbone quality — CLIP was pretrained on far more diverse data. This motivates moving to CLIP-based encoders.
+4. **v3's per-image headline (8.58%) is partially a measurement artefact.** Its gains are concentrated in easy, high-photo-count landmarks. When each landmark counts once (per-lm max), v2 is actually the best model. For Kostas's pipeline (where the goal is to correctly identify landmarks, not score well on easy ones), **recommend v2 or v4**.
 
-5. **Per-landmark vs per-image.** Once per-landmark eval runs, expect significantly higher numbers (maybe 15–25% R@1) because success = any of ~18 ground images retrieves correctly. This is a useful and fairer metric for reporting.
+5. **Hard negatives are the main driver of training.** GPS → DSS transition causes a temporary loss spike, then steady improvement. Batch accuracy: ~49% → 93.5% over training.
+
+6. **CLIP backbone gap is large.** MMCLIP/GeoClip reach 20–21% zero-shot with CLIP ViT-L. Our trained ConvNeXt reaches 8.58% per-image. The gap is almost entirely backbone quality — CLIP was pretrained on 400M+ diverse image-text pairs vs 14M ImageNet.
 
 ---
 
 ## How to reproduce
 
+All evals are complete. JSON files are in `eval_results/`. To re-run from scratch:
+
 ```bash
-# Re-evaluate existing checkpoints with per-landmark metrics (run on HPC):
-bsub < scripts/eval_crossview_zeroshot.sh
-bsub < scripts/eval_crossview_v2.sh
-bsub < scripts/eval_crossview_v3.sh
+# Re-evaluate existing checkpoints (all on HPC — 4–8h wall time):
+bsub < scripts/eval_crossview_zeroshot.sh   # zero-shot, 8h
+bsub < scripts/eval_crossview_v2.sh         # v2, 4h
+bsub < scripts/eval_crossview_v3.sh         # v3, 8h (384px)
+bsub < scripts/eval_crossview_v4.sh         # v4, 4h
 
-# Train v4:
-bsub < scripts/run_crossview_convnext_base_v4.sh
-
-# Manual eval (any checkpoint):
+# Manual eval (any checkpoint, local):
 python -m mmgeo.crossview.eval \
     --config configs/crossview_convnext_base_v3.yaml \
     --checkpoint checkpoints/crossview/cv_v3_base_20260429_055409/best.pt \
     --no-pool --landmark-agg max \
-    --output eval_results_v3.json
+    --output eval_results/eval_v3_repro.json
 ```
