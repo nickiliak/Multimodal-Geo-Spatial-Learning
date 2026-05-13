@@ -1,0 +1,36 @@
+{
+  "checkpoint": "pretrained_only",
+  "epoch": "pretrained",
+  "pretrained_only": true,
+  "pool_queries": false,
+  "results": {
+    "g2s": {
+      "recall@1": 0.003424657534246575,
+      "recall@5": 0.012253852739726028,
+      "recall@10": 0.021350599315068493,
+      "map@1000": 0.010026513087022602,
+      "lm_max_recall@1": 0.003,
+      "lm_max_recall@5": 0.009,
+      "lm_max_recall@10": 0.021,
+      "lm_max_map@1000": 0.008936690795933828,
+      "lm_mean_recall@1": 0.004,
+      "lm_mean_recall@5": 0.012,
+      "lm_mean_recall@10": 0.018,
+      "lm_mean_map@1000": 0.008866803576587699
+    },
+    "s2g": {
+      "recall@1": 0.0,
+      "recall@5": 0.003,
+      "recall@10": 0.008,
+      "map@1000": 0.0005255539451791117,
+      "lm_max_recall@1": 0.0,
+      "lm_max_recall@5": 0.003,
+      "lm_max_recall@10": 0.008,
+      "lm_max_map@1000": 0.0015768871387699618,
+      "lm_mean_recall@1": 0.0,
+      "lm_mean_recall@5": 0.003,
+      "lm_mean_recall@10": 0.008,
+      "lm_mean_map@1000": 0.0015768871387699618
+    }
+  }
+}

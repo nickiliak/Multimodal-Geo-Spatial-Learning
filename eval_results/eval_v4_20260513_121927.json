@@ -1,0 +1,36 @@
+{
+  "checkpoint": "checkpoints/crossview/cv_v4_base_20260513_013400/best.pt",
+  "epoch": "36",
+  "pretrained_only": false,
+  "pool_queries": false,
+  "results": {
+    "g2s": {
+      "recall@1": 0.0763056506849315,
+      "recall@5": 0.19022902397260275,
+      "recall@10": 0.2457191780821918,
+      "map@1000": 0.13339703875277595,
+      "lm_max_recall@1": 0.081,
+      "lm_max_recall@5": 0.185,
+      "lm_max_recall@10": 0.253,
+      "lm_max_map@1000": 0.13722153869050088,
+      "lm_mean_recall@1": 0.185,
+      "lm_mean_recall@5": 0.324,
+      "lm_mean_recall@10": 0.396,
+      "lm_mean_map@1000": 0.2533076070502866
+    },
+    "s2g": {
+      "recall@1": 0.04,
+      "recall@5": 0.113,
+      "recall@10": 0.168,
+      "map@1000": 0.021181679683334117,
+      "lm_max_recall@1": 0.04,
+      "lm_max_recall@5": 0.113,
+      "lm_max_recall@10": 0.168,
+      "lm_max_map@1000": 0.03606816102494486,
+      "lm_mean_recall@1": 0.04,
+      "lm_mean_recall@5": 0.113,
+      "lm_mean_recall@10": 0.168,
+      "lm_mean_map@1000": 0.03606816102494486
+    }
+  }
+}
