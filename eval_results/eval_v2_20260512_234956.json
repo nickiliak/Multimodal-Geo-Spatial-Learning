@@ -1,0 +1,28 @@
+{
+  "checkpoint": "checkpoints/crossview/cv_v2_base_20260422_230539/best.pt",
+  "epoch": "30",
+  "pretrained_only": false,
+  "pool_queries": false,
+  "results": {
+    "g2s": {
+      "recall@1": 0.0721318493150685,
+      "recall@5": 0.1851990582191781,
+      "recall@10": 0.253103595890411,
+      "map@1000": 0.13103674593388026,
+      "lm_recall@1": 0.09,
+      "lm_recall@5": 0.203,
+      "lm_recall@10": 0.272,
+      "lm_map@1000": 0.152108701152727
+    },
+    "s2g": {
+      "recall@1": 0.052,
+      "recall@5": 0.144,
+      "recall@10": 0.187,
+      "map@1000": 0.026602257770767426,
+      "lm_recall@1": 0.053,
+      "lm_recall@5": 0.144,
+      "lm_recall@10": 0.187,
+      "lm_map@1000": 0.04380813777982257
+    }
+  }
+}

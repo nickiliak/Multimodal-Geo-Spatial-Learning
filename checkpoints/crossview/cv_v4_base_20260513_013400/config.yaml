@@ -1,0 +1,49 @@
+data:
+  root: data/MML_Data
+model:
+  backbone: convnext_base.fb_in22k
+  embed_dim: 0
+training:
+  epochs: 36
+  batch_size: 64
+  img_size: 224
+  n_ground: 2
+  lr: 0.0001
+  weight_decay: 0.0001
+  temperature: 0.07
+  learnable_temp: true
+  label_smoothing: 0.1
+  warmup_epochs: 3
+  warmup_start_factor: 0.1
+  min_lr_ratio: 0.01
+  num_workers: 6
+  prefetch_factor: 4
+  persistent_workers: true
+  eval_every: 9
+  eval_batch_size: 384
+evaluation:
+  recall_ks:
+  - 1
+  - 5
+  - 10
+  map_k: 1000
+  directions:
+  - g2s
+  - s2g
+  include_index: true
+  pool_queries: false
+hard_negatives:
+  enabled: true
+  neighbor_pool: 64
+  pool_size: 32
+  iters_per_epoch: null
+  gps_epochs: 4
+  dss_refresh_every: 1
+  dss_embed_batch: 128
+device: cuda
+save_dir: checkpoints/crossview
+logging:
+  runs_root: checkpoints/crossview
+  run_prefix: cv_v4_base_
+  run_tag: null
+  selection_metric: g2s_recall@1
