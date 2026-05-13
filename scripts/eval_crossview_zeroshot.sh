@@ -5,7 +5,7 @@
 #BSUB -R "select[gpu32gb]"
 #BSUB -n 6
 #BSUB -R "span[hosts=1] rusage[mem=32GB]"
-#BSUB -W 02:00
+#BSUB -W 08:00
 #BSUB -o logs/crossview_eval_zeroshot_%J.out
 #BSUB -e logs/crossview_eval_zeroshot_%J.err
 
