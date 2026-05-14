@@ -312,6 +312,99 @@ def compute_per_landmark_retrieval_metrics(
     return results
 
 
+def compute_per_image_landmark_metrics(
+    query_embeddings: torch.Tensor,
+    query_lids: np.ndarray,
+    index_embeddings: torch.Tensor,
+    index_lids: np.ndarray,
+    recall_ks: list[int] | None = None,
+    map_k: int = DEFAULT_MAP_K,
+    batch_size: int = 256,
+) -> dict[str, float]:
+    """Per-image scoring averaged per landmark.
+
+    Each query image is scored independently (Recall@K, mAP@K). Results are
+    averaged within each landmark first, then across landmarks — giving equal
+    weight to each landmark regardless of how many images it has.
+
+    Contrast with compute_per_landmark_retrieval_metrics(agg="mean") which
+    averages *similarity vectors* before computing Recall@K (binary per
+    landmark). Here Recall@K values themselves are averaged, so a landmark
+    with one bad image gets a continuously lower score rather than a hard 0/1.
+
+    Example: 9/10 images retrieve correctly → landmark recall@1 = 0.90.
+    """
+    if recall_ks is None:
+        recall_ks = DEFAULT_RECALL_KS
+
+    unique_idx_lids, idx_counts = np.unique(index_lids, return_counts=True)
+    lid_to_count = dict(zip(unique_idx_lids.tolist(), idx_counts.tolist()))
+
+    n_queries = len(query_embeddings)
+    effective_map_k = min(map_k, len(index_embeddings))
+    top_k_needed = max(max(recall_ks), effective_map_k)
+
+    lm_recall: dict[int, dict[int, list[float]]] = {}
+    lm_ap: dict[int, list[float]] = {}
+
+    index_embeddings = index_embeddings.to(query_embeddings.device)
+
+    for start in range(0, n_queries, batch_size):
+        end = min(start + batch_size, n_queries)
+        q_batch = query_embeddings[start:end]
+        q_lids_batch = query_lids[start:end]
+
+        sims = q_batch @ index_embeddings.T
+        topk_indices = sims.topk(top_k_needed, dim=1).indices.cpu().numpy()
+
+        for i in range(len(q_batch)):
+            q_lid = int(q_lids_batch[i])
+            if q_lid == -1:
+                continue
+
+            retrieved_lids = index_lids[topk_indices[i]]
+            relevance = (retrieved_lids == q_lid)
+
+            if q_lid not in lm_recall:
+                lm_recall[q_lid] = {k: [] for k in recall_ks}
+                lm_ap[q_lid] = []
+
+            for k in recall_ks:
+                lm_recall[q_lid][k].append(float(relevance[:k].any()))
+
+            total_relevant = lid_to_count.get(q_lid, 0)
+            if total_relevant > 0:
+                rel_top = relevance[:effective_map_k].astype(np.float64)
+                if rel_top.sum() == 0:
+                    lm_ap[q_lid].append(0.0)
+                else:
+                    ranks = np.arange(1, effective_map_k + 1, dtype=np.float64)
+                    cum_hits = np.cumsum(rel_top)
+                    ap = ((cum_hits / ranks) * rel_top).sum() / min(total_relevant, effective_map_k)
+                    lm_ap[q_lid].append(float(ap))
+
+    unique_lids = list(lm_recall.keys())
+    n_landmarks = len(unique_lids)
+    if n_landmarks == 0:
+        results = {f"recall@{k}": 0.0 for k in recall_ks}
+        results[f"map@{effective_map_k}"] = 0.0
+        return results
+
+    lm_recall_avg: dict[int, list[float]] = {k: [] for k in recall_ks}
+    lm_ap_avg: list[float] = []
+
+    for lid in unique_lids:
+        for k in recall_ks:
+            imgs = lm_recall[lid][k]
+            lm_recall_avg[k].append(sum(imgs) / len(imgs) if imgs else 0.0)
+        aps = lm_ap[lid]
+        lm_ap_avg.append(sum(aps) / len(aps) if aps else 0.0)
+
+    results = {f"recall@{k}": sum(lm_recall_avg[k]) / n_landmarks for k in recall_ks}
+    results[f"map@{effective_map_k}"] = sum(lm_ap_avg) / n_landmarks
+    return results
+
+
 def compute_recall_at_k(
     query_embeds: torch.Tensor,
     query_lids: np.ndarray,
@@ -426,5 +519,16 @@ def evaluate_crossview(
             lm_map_key = next(k for k in lm_metrics if k.startswith("map@"))
             print(f"  {lm_map_key}: {lm_metrics[lm_map_key]:.4f} ({lm_metrics[lm_map_key]*100:.2f}%)  [per-landmark {agg}]")
             metrics.update({f"lm_{agg}_{k}": v for k, v in lm_metrics.items()})
+
+        img_lm_metrics = compute_per_image_landmark_metrics(
+            q_embeds_raw, q_lids_raw, idx_embeds, idx_lids,
+            recall_ks=effective_ks, map_k=map_k,
+        )
+        print(f"\n  --- Per-landmark (img-mean, {n_lm} landmarks) ---")
+        for k in effective_ks:
+            print(f"  recall@{k}: {img_lm_metrics[f'recall@{k}']:.4f} ({img_lm_metrics[f'recall@{k}']*100:.2f}%)  [per-image avg]")
+        img_lm_map_key = next(k for k in img_lm_metrics if k.startswith("map@"))
+        print(f"  {img_lm_map_key}: {img_lm_metrics[img_lm_map_key]:.4f} ({img_lm_metrics[img_lm_map_key]*100:.2f}%)  [per-image avg]")
+        metrics.update({f"lm_img_{k}": v for k, v in img_lm_metrics.items()})
 
     return metrics
