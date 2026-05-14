@@ -24,8 +24,8 @@ training:
   num_workers: 6
   prefetch_factor: 4
   persistent_workers: true
-  eval_every: 1
-  eval_batch_size: 128    # larger features → smaller eval batch
+  eval_every: 3           # eval every 3 epochs → 12 evals over 35 epochs (~2.5h eval total)
+  eval_batch_size: 384    # 3× faster than 128; no-grad inference fits 32GB easily
 
 evaluation:
   recall_ks: [1, 5, 10]

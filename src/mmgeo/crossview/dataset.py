@@ -32,24 +32,36 @@ def _hex_path(data_root: Path, split: str, modality: str, hex_id: str) -> Path:
 # Transforms
 # ---------------------------------------------------------------------------
 
-def get_train_transforms(img_size: int = 384) -> transforms.Compose:
+_IMAGENET_MEAN = [0.485, 0.456, 0.406]
+_IMAGENET_STD  = [0.229, 0.224, 0.225]
+
+
+def get_train_transforms(
+    img_size: int = 384,
+    mean: list[float] = _IMAGENET_MEAN,
+    std: list[float] = _IMAGENET_STD,
+) -> transforms.Compose:
     """Training augmentations for both ground and satellite images."""
     return transforms.Compose([
         transforms.Resize((img_size, img_size)),
         transforms.RandomHorizontalFlip(p=0.5),
         transforms.ColorJitter(brightness=0.2, contrast=0.2, saturation=0.2, hue=0.1),
         transforms.ToTensor(),                                        # ← move ToTensor before RandomErasing
-        transforms.Normalize(mean=[0.485, 0.456, 0.406], std=[0.229, 0.224, 0.225]),
+        transforms.Normalize(mean=mean, std=std),
         transforms.RandomErasing(p=0.2, scale=(0.02, 0.15)),         # ← RandomErasing after ToTensor
     ])
 
 
-def get_eval_transforms(img_size: int = 384) -> transforms.Compose:
+def get_eval_transforms(
+    img_size: int = 384,
+    mean: list[float] = _IMAGENET_MEAN,
+    std: list[float] = _IMAGENET_STD,
+) -> transforms.Compose:
     """Deterministic transforms for evaluation."""
     return transforms.Compose([
         transforms.Resize((img_size, img_size)),
         transforms.ToTensor(),
-        transforms.Normalize(mean=[0.485, 0.456, 0.406], std=[0.229, 0.224, 0.225]),
+        transforms.Normalize(mean=mean, std=std),
     ])
 
 

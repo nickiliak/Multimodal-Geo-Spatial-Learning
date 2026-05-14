@@ -1,13 +1,13 @@
 #!/bin/sh
 ### LSF Queue Options
 #BSUB -q gpuv100
-#BSUB -J geoclip_zeroshot
+#BSUB -J newgeo_train
 #BSUB -n 4
 #BSUB -R "span[hosts=1]"
 #BSUB -R "rusage[mem=4GB]"
 #BSUB -M 5GB
 #BSUB -gpu "num=1:mode=exclusive_process"
-#BSUB -W 3:00
+#BSUB -W 24:00
 #BSUB -o Output_%J.out
 #BSUB -e Output_%J.err
 
@@ -18,6 +18,7 @@ echo "Job ID: $LSB_JOBID | Node: $(hostname) | Date: $(date)"
 echo "--------------------------------------------------"
 
 export PATH="$HOME/.local/bin:$PATH"
+export PYTHONUNBUFFERED=1
 cd ~/Multimodal-Geo-Spatial-Learning || { echo "Project directory not found"; exit 1; }
 
 nvidia-smi
@@ -37,13 +38,7 @@ assert torch.cuda.is_available(), 'CUDA unavailable'
     exit 1
 }
 
-echo ">>> Running GeoClip zero-shot notebook..."
-uv run --no-sync jupyter nbconvert \
-    --to notebook \
-    --execute \
-    --inplace \
-    --ExecutePreprocessor.timeout=3600 \
-    --ExecutePreprocessor.cwd="$(pwd)/notebooks/team" \
-    notebooks/team/03_geoclip_zeroshot.ipynb
+echo ">>> Training newGeoCLIP transformer aggregator..."
+uv run --no-sync python -m mmgeo.geolocalizations.geoclip.train_new_geo
 
 echo "Done."

@@ -45,3 +45,11 @@ checkpoints/
 # accidental shell/terminal junk
 *.tmp
 .claude/settings.local.json
+/.claude/worktrees
+*.nfs*
+
+# HPC job logs (LSF/Slurm)
+Output_*.err
+Output_*.out
+logs/*.err
+logs/*.out
