@@ -61,12 +61,13 @@ PER_LM_MEAN = {
     "v4 (ep36)": 18.50,
 }
 
-# Per-landmark attention-weighted mean Recall@1 (g2s) — fill after HPC eval
+# Per-landmark attention-weighted mean Recall@1 (g2s)
+# Finding: attn < mean for all models — simple mean wins with K≈18 diverse photos
 PER_LM_ATTN = {
-    "Zero-shot": None,   # fill from lm_attn_recall@1 in eval JSON
-    "v2 (ep30)": None,
-    "v3 (ep36)": None,
-    "v4 (ep36)": None,
+    "Zero-shot": 0.30,
+    "v2 (ep30)": 17.50,
+    "v3 (ep36)": 18.20,
+    "v4 (ep36)": 18.20,
 }
 
 # Keep legacy alias for backward compat

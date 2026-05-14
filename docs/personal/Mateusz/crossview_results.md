@@ -24,14 +24,14 @@ All three eval protocols side-by-side. Columns: per-image (img), per-landmark me
 
 | Model | R@1 img | R@1 mean | R@1 attn | R@1 max | R@5 img | R@5 mean | R@5 max | R@10 img | R@10 mean | R@10 max | mAP img | mAP mean | mAP max |
 |-------|---------|----------|----------|---------|---------|----------|---------|----------|-----------|----------|---------|----------|---------|
-| Zero-shot | 0.34% | 0.40% | TBD | 0.30% | 1.23% | 1.20% | 0.90% | 2.14% | 1.80% | 2.10% | 1.00% | 0.89% | 0.89% |
-| v2 (ep30) | 7.21% | 17.60% | TBD | **9.00%** | 18.52% | 33.40% | 20.30% | 25.31% | **42.20%** | 27.20% | 13.10% | 25.50% | 15.21% |
-| v3 (ep36) | **8.58%** | 18.40% | TBD | 7.10% | 18.13% | 31.70% | 14.90% | 22.29% | 37.20% | 18.80% | 13.25% | 25.12% | 11.10% |
-| v4 (ep36) | 7.63% | **18.50%** | TBD | 8.10% | **19.02%** | **32.40%** | 18.50% | 24.57% | 39.60% | 25.30% | **13.34%** | **25.33%** | 13.72% |
+| Zero-shot | 0.34% | 0.40% | 0.30% | 0.30% | 1.23% | 1.20% | 0.90% | 2.14% | 1.80% | 2.10% | 1.00% | 0.89% | 0.89% |
+| v2 (ep30) | 7.21% | 17.60% | 17.50% | **9.00%** | 18.52% | 33.40% | 20.30% | 25.31% | **42.20%** | 27.20% | 13.10% | 25.50% | 15.21% |
+| v3 (ep36) | **8.58%** | 18.40% | 18.20% | 7.10% | 18.13% | 31.70% | 14.90% | 22.29% | 37.20% | 18.80% | 13.25% | 25.12% | 11.10% |
+| v4 (ep36) | 7.63% | **18.50%** | 18.20% | 8.10% | **19.02%** | **32.40%** | 18.50% | 24.57% | 39.60% | 25.30% | **13.34%** | **25.33%** | 13.72% |
 
 *per-image* = each of 18,688 ground images is an independent query (paper-comparable).
 *mean-agg* = 1,000 landmarks, average score across all ground photos (team primary; ≡ embedding-space mean-pooling for ranking).
-*attn* = attention-weighted mean: photos weighted by cosine-sim to landmark centre (pending HPC eval).
+*attn* = attention-weighted mean: photos weighted by softmax cosine-sim to landmark centroid. Slightly worse than mean (−0.1% to −0.3% R@1) — simple mean wins.
 *max-agg* = 1,000 landmarks, best score across all ground photos (upper bound on landmark coverage).
 
 ---
@@ -72,6 +72,23 @@ Each landmark counts once regardless of photo count.
 
 Mean-agg: v4 ≈ v3 > v2. Max-agg (landmark coverage): v2 > v4 > v3 — reversed.
 Note: s2g per-lm max = per-lm mean (one satellite per landmark), shown in s2g table below.
+
+**Attention-weighted mean-agg** ("centre-weighted" — experimental):
+
+Photos weighted by softmax cosine-similarity to the landmark embedding centroid. Representative photos (close to centre) get more weight; unusual viewpoints get less.
+
+| Model | R@1 | R@5 | R@10 | mAP@1k |
+|-------|-----|-----|------|--------|
+| Zero-shot | 0.30% | 1.40% | 1.80% | 0.85% |
+| v2 (ep30) | 17.50% | 33.10% | 42.10% | 25.21% |
+| v3 (ep36) | 18.20% | 32.00% | 37.20% | 24.85% |
+| v4 (ep36) | 18.20% | 32.10% | 39.20% | 25.21% |
+
+**Finding: attn < mean for all trained models** (−0.1% to −0.3% R@1). Simple mean wins.
+With K≈18 diverse photos, the mean is already stable. Attention down-weights unusual viewpoints,
+but those are not noise — they are genuine photos of the same place from different angles that
+happen to match the satellite top-down view. Discarding them hurts. Attention would likely help
+only if a landmark had truly bad/unrelated photos mixed in.
 
 > † MMCLIP/GeoClip are zero-shot — never trained on MMLandmarks. Not a fair direct comparison with our trained models.
 
@@ -152,9 +169,11 @@ ConvNeXt-Base (fb_in22k), 224px, 36 epochs. Multi-positive InfoNCE (K=2), label 
 
 4. **v3's per-image headline (8.58%) is partially a measurement artefact.** Its gains are concentrated in easy, high-photo-count landmarks. When each landmark counts once (per-lm max), v2 is actually the best model. For Kostas's pipeline (where the goal is to correctly identify landmarks, not score well on easy ones), **recommend v2 or v4**.
 
-5. **Hard negatives are the main driver of training.** GPS → DSS transition causes a temporary loss spike, then steady improvement. Batch accuracy: ~49% → 93.5% over training.
+5. **Simple mean beats attention-weighted mean.** Attention-weighted mean aggregation (photos weighted by similarity to landmark centroid) scores −0.1% to −0.3% R@1 below simple mean across all trained models. With K≈18 diverse photos, the mean is already stable and "unusual" viewpoints are not noise — they are real views that can match the satellite top-down. Attention discards useful diversity. Recommendation: use mean-agg (lm_mean_recall@k).
 
-6. **CLIP backbone gap is large.** MMCLIP/GeoClip reach 20–21% zero-shot with CLIP ViT-L. Our trained ConvNeXt reaches 8.58% per-image. The gap is almost entirely backbone quality — CLIP was pretrained on 400M+ diverse image-text pairs vs 14M ImageNet.
+6. **Hard negatives are the main driver of training.** GPS → DSS transition causes a temporary loss spike, then steady improvement. Batch accuracy: ~49% → 93.5% over training.
+
+7. **CLIP backbone gap is large.** MMCLIP/GeoClip reach 20–21% zero-shot with CLIP ViT-L. Our trained ConvNeXt reaches 8.58% per-image. The gap is almost entirely backbone quality — CLIP was pretrained on 400M+ diverse image-text pairs vs 14M ImageNet.
 
 ---
 
