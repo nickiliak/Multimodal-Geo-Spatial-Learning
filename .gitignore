@@ -27,10 +27,10 @@ uv.lock
 
 # Project-specific
 data/
-outputs/
+outputs/jobs
 models/*
 !models/.gitkeep
-
+outputs/hybrid_cache
 # OS
 .DS_Store
 Thumbs.db

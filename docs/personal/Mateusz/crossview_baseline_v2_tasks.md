@@ -1,4 +1,4 @@
-# Cross-View Retrieval Baseline — v1 & v2 Documentation
+# Cross-View Retrieval Baseline — v1, v2 & v3 Documentation
 
 ## 1. What this is
 
@@ -16,6 +16,7 @@ This baseline serves as the **image-only comparison point** in the final project
 | **v2 (pooled)** | **ConvNeXt-Base** | **MMLandmarks train** | **17.60%** | **46.66%** | **60.96%** | **25.50%** | pooled — NOT paper-comparable |
 | **v2 (unpooled)** | **ConvNeXt-Base** | **MMLandmarks train** | **7.21%** | **18.52%** | **25.31%** | **13.10%** | **unpooled — paper-comparable** |
 | ConvNeXt-Base zero-shot | ConvNeXt-Base | ImageNet-22k only | 0.25% | 0.76% | 1.13% | 0.59% | unpooled, no MMLandmarks training |
+| **v3 (unpooled)** | **ConvNeXt-Base (384px)** | **MMLandmarks train** | **TBD** | — | — | — | **unpooled, multi-positive InfoNCE** |
 | MMCLIP (paper) | CLIP ViT-L | **zero-shot** | 20.5% | — | — | — | unpooled |
 | GeoClip (paper) | CLIP ViT-L | **zero-shot** | 21.1% | — | — | — | unpooled |
 
@@ -138,10 +139,13 @@ Expected unpooled g2s R@1: roughly **10–14%** (harder, but paper-comparable).
 | `src/mmgeo/crossview/train.py` | Full training loop: GPS/DSS hard-neg, LR schedule, eval, checkpointing, `--resume` support |
 | `src/mmgeo/crossview/evaluate.py` | Eval utilities: `extract_embeddings`, `compute_retrieval_metrics`, `pool_embeddings_by_landmark`, `evaluate_crossview` |
 | `src/mmgeo/crossview/eval.py` | **Standalone eval script** — `--checkpoint` for trained eval, `--pretrained-only` for zero-shot, `--pool`/`--no-pool` |
-| `src/mmgeo/crossview/dataset.py` | `MMLImageDataset`, `get_eval_transforms` |
-| `scripts/run_crossview_convnext_base.sh` | LSF job script for training (with resume support) |
+| `src/mmgeo/crossview/dataset.py` | `MMLImageDataset`, `MMLCrossViewDataset` (with `n_ground` parameter), `get_eval_transforms` |
+| `src/mmgeo/crossview/losses.py` | `SymmetricInfoNCE`, `MultiPositiveInfoNCE` (K=1 reduces to symmetric) |
+| `scripts/run_crossview_convnext_base.sh` | LSF job script for v2 training (with resume support) |
 | `scripts/eval_crossview.sh` | LSF job script for trained eval (`--no-pool`, paper-comparable) |
 | `scripts/eval_crossview_zeroshot.sh` | LSF job script for zero-shot eval (`--pretrained-only --no-pool`) |
+| `configs/crossview_convnext_base.yaml` | v2 config (224px, single-positive, pooled eval) |
+| `configs/crossview_convnext_base_384_zeroshot.yaml` | 384px ConvNeXt zero-shot config |
 
 ---
 
@@ -153,11 +157,17 @@ bsub < scripts/run_crossview_convnext_base.sh
 ```
 Edit `RESUME` in the script to point to an existing checkpoint, or leave empty to start fresh.
 
+For v3 (multi-positive InfoNCE, 384px), copy the v2 yaml and edit:
+`backbone.name=convnext_base.fb_in22k_ft_in1k_384`, `dataset.image_size=384`,
+`training.batch_size=24`, `loss.type=multi_positive`, `dataset.n_ground=3`,
+`evaluation.pool_queries=false`.
+
 ### Standalone eval on HPC (paper-comparable, no pooling)
 ```bash
 bsub < scripts/eval_crossview.sh
 ```
 Results are printed to the job log and saved as JSON in `logs/`.
+
 
 ### Standalone eval locally (pooled, quick sanity check)
 ```bash
@@ -231,7 +241,40 @@ This sets up a clear narrative: cross-view retrieval strongly benefits from doma
 
 ---
 
-## 10. v1 → v2 changes summary
+## 10. v2 → v3 changes summary
+
+| Area | v2 | v3 |
+|------|----|----|
+| Backbone | `convnext_base.fb_in22k` (ImageNet-22k only) | `convnext_base.fb_in22k_ft_in1k_384` (22k → 1k fine-tune at 384px) |
+| Image size | 224 px | 384 px (matches backbone resolution) |
+| Batch size | 64 | 24 (reduced for 384px memory) |
+| Eval batch size | 384 | 192 (reduced for 384px) |
+| Label smoothing | 0.0 | 0.1 |
+| Loss | `SymmetricInfoNCE` (1 ground / landmark) | `MultiPositiveInfoNCE` (3 ground / landmark) |
+| n_ground | 1 | 3 |
+| Pool queries (training eval) | True (pooled) | **False** (unpooled, paper-comparable from start) |
+| Run prefix | `cv_v2_base_` | `cv_v3_base_` |
+
+### Multi-positive InfoNCE — what changed
+
+**`src/mmgeo/crossview/losses.py`** — new `MultiPositiveInfoNCE` class:
+- Receives `ground_embeds (B×K, D)` and `sat_embeds (B, D)`
+- s2g direction: each satellite has K soft positives (uniform 1/K each), smoothed with label_smoothing
+- g2s direction: each of the B×K ground images has one hard satellite positive (`j // K`)
+- K=1 reduces exactly to `SymmetricInfoNCE`
+
+**`src/mmgeo/crossview/dataset.py`** — `MMLCrossViewDataset` gains `n_ground` parameter:
+- `n_ground=1` (default): backward-compatible, `ground_img` is `(3, H, W)` as before
+- `n_ground=K`: `ground_img` is `(K, 3, H, W)`, K images sampled randomly per landmark
+
+**`src/mmgeo/crossview/train.py`**:
+- `train_one_epoch`: detects 5D ground tensor, reshapes to `(B×K, 3, H, W)` before forward; diagnostics use mean-pooled per-landmark embedding
+- `train()`: reads `n_ground` from config, passes to train dataset; DSS embedding dataset keeps `n_ground=1` (needs single embeddings per landmark)
+- `_run_eval`: `pool_queries` reads from `cfg["evaluation"]["pool_queries"]` (default True; pass `pool_queries=False` in config for the paper-comparable v3 protocol).
+
+---
+
+## 11. v1 → v2 changes summary
 
 | Area | v1 | v2 |
 |------|----|----|
@@ -251,7 +294,8 @@ This sets up a clear narrative: cross-view retrieval strongly benefits from doma
 
 ---
 
-## 11. Limitations and what's next (Task 7)
+## 12. Limitations and what's next (Task 7)
+
 
 ### Known limitations
 - **Single positive per batch step:** training uses one ground + one satellite image per landmark per iteration. MMLandmarks has ~18 ground images per landmark; we don't use all of them simultaneously in one loss computation (multi-positive InfoNCE). This is a valid simplification but not the maximum the data allows.

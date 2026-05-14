@@ -1,0 +1,67 @@
+# Hybrid two-stage pipeline finetuning
+# Trains Sample4Geo (frozen GeoCLIP) for additional epochs starting from a
+# pretrained checkpoint, evaluating with the hybrid pipeline:
+#   GeoCLIP (rough GPS) -> radius mask -> Sample4Geo rerank.
+# Plain (ground, sat) InfoNCE training; GeoCLIP only enters at eval time.
+
+data:
+  root: "data/MML_Data"
+
+model:
+  backbone: "convnext_base.fb_in22k_ft_in1k_384"
+  embed_dim: 0
+  # Path to the Sample4Geo checkpoint to finetune from. Must be a dict with
+  # keys {"model_state_dict", "epoch", "config"} as written by crossview/train.py.
+  pretrained_ckpt: "models/finetuned.pt"
+
+training:
+  epochs: 10              # 10 additional epochs on top of finetuned.pt
+  batch_size: 24          # 384px on 32GB V100
+  img_size: 384
+  n_ground: 3             # multi-positive InfoNCE (matches finetuned.pt)
+  lr: 0.00005             # lower LR for finetuning continuation
+  weight_decay: 0.0001
+  temperature: 0.07
+  learnable_temp: true
+  label_smoothing: 0.1
+  warmup_epochs: 1
+  warmup_start_factor: 0.1
+  min_lr_ratio: 0.01
+  num_workers: 6
+  prefetch_factor: 4
+  persistent_workers: true
+  eval_every: 4           # evaluate at epochs 4, 8 ... and the final epoch
+  eval_batch_size: 192
+
+# Sample4Geo-style hard-negative sampling (same as v3)
+hard_negatives:
+  enabled: true
+  neighbor_pool: 64
+  pool_size: 32
+  iters_per_epoch: null
+  gps_epochs: 2           # shorter GPS warmup since model is already trained
+  dss_refresh_every: 1
+  dss_embed_batch: 128
+
+# Hybrid evaluation (GeoCLIP -> radius -> Sample4Geo rerank).
+# Used for periodic during-training eval and final-epoch full eval.
+hybrid_eval:
+  # During-training eval — fast, single config.
+  index_mode: "full"               # "query" or "full" sat gallery
+  query_mode: "all"                # "one_per_landmark" or "all" (18,688 ground queries)
+  radius_km: 25.0                  # primary narrowing radius
+  fallback: "fallback_full"        # empty-candidate -> rerank against full gallery
+  recall_ks: [1, 5, 10]
+  map_k: 1000
+  geoclip_gallery_source: "paper"  # 100k index + 1k query coords
+  geoclip_batch_size: 64
+  query_batch: 64
+  cache_dir: "outputs/hybrid_cache"  # gallery cache (per-run subdir)
+
+device: "cuda"
+
+logging:
+  runs_root: "checkpoints/hybrid"
+  run_prefix: "hybrid_"
+  run_tag: null
+  selection_metric: "g2s_R@1"      # hybrid_eval recall@1, ground -> satellite
