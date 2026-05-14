@@ -1,0 +1,218 @@
+Job started at Thu May 14 00:15:38 CEST 2026
+Running on n-62-20-13
+Thu May 14 00:15:38 2026       
++-----------------------------------------------------------------------------------------+
+| NVIDIA-SMI 580.159.03             Driver Version: 580.159.03     CUDA Version: 13.0     |
++-----------------------------------------+------------------------+----------------------+
+| GPU  Name                 Persistence-M | Bus-Id          Disp.A | Volatile Uncorr. ECC |
+| Fan  Temp   Perf          Pwr:Usage/Cap |           Memory-Usage | GPU-Util  Compute M. |
+|                                         |                        |               MIG M. |
+|=========================================+========================+======================|
+|   0  Tesla V100-PCIE-32GB           On  |   00000000:58:00.0 Off |                    0 |
+| N/A   41C    P0             43W /  250W |       0MiB /  32768MiB |      0%   E. Process |
+|                                         |                        |                  N/A |
++-----------------------------------------+------------------------+----------------------+
+
++-----------------------------------------------------------------------------------------+
+| Processes:                                                                              |
+|  GPU   GI   CI              PID   Type   Process name                        GPU Memory |
+|        ID   ID                                                               Usage      |
+|=========================================================================================|
+|  No running processes found                                                             |
++-----------------------------------------------------------------------------------------+
+Evaluating v2 checkpoint: checkpoints/crossview/cv_v2_base_20260422_230539/best.pt
+Protocol: --no-pool (18,689 per-image queries) + --landmark-agg max (1,000 per-landmark)
+Device: cuda
+[CrossViewModel] backbone=convnext_base.fb_in22k, feature_dim=1024, embed_dim=1024, params=87.6M
+Loaded checkpoint from epoch 30 (checkpoints/crossview/cv_v2_base_20260422_230539/best.pt)
+Pool queries: False
+============================================================
+timm data_config normalization: mean=[0.485, 0.456, 0.406], std=[0.229, 0.224, 0.225]
+[MMLImageDataset] split=query, modality=ground, images=18688, landmarks=1000
+[MMLImageDataset] split=query, modality=satellite, images=1000, landmarks=1000
+[MMLImageDataset] split=index, modality=satellite, images=99539, landmarks=99539
+[Eval] gallery satellite: query=1000 + index=99539 = 100539
+
+============================================================
+Evaluating G2S retrieval
+============================================================
+Embedding queries...
+  → 18688 query embeddings, 1000 unique landmarks
+Embedding index...
+  → 100539 index embeddings, 1001 unique landmarks
+Computing metrics...
+  recall@1: 0.0721 (7.21%)
+  recall@5: 0.1852 (18.52%)
+  recall@10: 0.2531 (25.31%)
+  map@1000: 0.1310 (13.10%)
+
+  --- Per-landmark (max-agg, 1000 landmarks) ---
+  recall@1: 0.0900 (9.00%)  [per-landmark max]
+  recall@5: 0.2030 (20.30%)  [per-landmark max]
+  recall@10: 0.2720 (27.20%)  [per-landmark max]
+  map@1000: 0.1521 (15.21%)  [per-landmark max]
+
+  --- Per-landmark (mean-agg, 1000 landmarks) ---
+  recall@1: 0.1760 (17.60%)  [per-landmark mean]
+  recall@5: 0.3340 (33.40%)  [per-landmark mean]
+  recall@10: 0.4220 (42.20%)  [per-landmark mean]
+  map@1000: 0.2550 (25.50%)  [per-landmark mean]
+
+  --- Per-landmark (attn-agg, 1000 landmarks) ---
+  recall@1: 0.1750 (17.50%)  [per-landmark attn]
+  recall@5: 0.3310 (33.10%)  [per-landmark attn]
+  recall@10: 0.4210 (42.10%)  [per-landmark attn]
+  map@1000: 0.2521 (25.21%)  [per-landmark attn]
+[MMLImageDataset] split=query, modality=satellite, images=1000, landmarks=1000
+[MMLImageDataset] split=query, modality=ground, images=18688, landmarks=1000
+[MMLImageDataset] split=index, modality=ground, images=714554, landmarks=714554
+[Eval] gallery ground: query=18688 + index=714554 = 733242
+
+============================================================
+Evaluating S2G retrieval
+============================================================
+Embedding queries...
+  → 1000 query embeddings, 1000 unique landmarks
+Embedding index...
+  → 733242 index embeddings, 1001 unique landmarks
+Computing metrics...
+  recall@1: 0.0520 (5.20%)
+  recall@5: 0.1440 (14.40%)
+  recall@10: 0.1870 (18.70%)
+  map@1000: 0.0266 (2.66%)
+
+  --- Per-landmark (max-agg, 1000 landmarks) ---
+  recall@1: 0.0530 (5.30%)  [per-landmark max]
+  recall@5: 0.1440 (14.40%)  [per-landmark max]
+  recall@10: 0.1870 (18.70%)  [per-landmark max]
+  map@1000: 0.0438 (4.38%)  [per-landmark max]
+
+  --- Per-landmark (mean-agg, 1000 landmarks) ---
+  recall@1: 0.0530 (5.30%)  [per-landmark mean]
+  recall@5: 0.1440 (14.40%)  [per-landmark mean]
+  recall@10: 0.1870 (18.70%)  [per-landmark mean]
+  map@1000: 0.0438 (4.38%)  [per-landmark mean]
+
+  --- Per-landmark (attn-agg, 1000 landmarks) ---
+  recall@1: 0.0530 (5.30%)  [per-landmark attn]
+  recall@5: 0.1440 (14.40%)  [per-landmark attn]
+  recall@10: 0.1870 (18.70%)  [per-landmark attn]
+  map@1000: 0.0438 (4.38%)  [per-landmark attn]
+
+============================================================
+SUMMARY  |  pool_queries=False  |  epoch=30
+============================================================
+
+  G2S:
+    recall@1: 7.21%
+    recall@5: 18.52%
+    recall@10: 25.31%
+    map@1000: 13.10%
+    lm_max_recall@1: 9.00%
+    lm_max_recall@5: 20.30%
+    lm_max_recall@10: 27.20%
+    lm_max_map@1000: 15.21%
+    lm_mean_recall@1: 17.60%
+    lm_mean_recall@5: 33.40%
+    lm_mean_recall@10: 42.20%
+    lm_mean_map@1000: 25.50%
+    lm_attn_recall@1: 17.50%
+    lm_attn_recall@5: 33.10%
+    lm_attn_recall@10: 42.10%
+    lm_attn_map@1000: 25.21%
+
+  S2G:
+    recall@1: 5.20%
+    recall@5: 14.40%
+    recall@10: 18.70%
+    map@1000: 2.66%
+    lm_max_recall@1: 5.30%
+    lm_max_recall@5: 14.40%
+    lm_max_recall@10: 18.70%
+    lm_max_map@1000: 4.38%
+    lm_mean_recall@1: 5.30%
+    lm_mean_recall@5: 14.40%
+    lm_mean_recall@10: 18.70%
+    lm_mean_map@1000: 4.38%
+    lm_attn_recall@1: 5.30%
+    lm_attn_recall@5: 14.40%
+    lm_attn_recall@10: 18.70%
+    lm_attn_map@1000: 4.38%
+
+Results saved to eval_results/eval_v2_20260514_001538.json
+Job finished at Thu May 14 01:28:30 CEST 2026
+
+------------------------------------------------------------
+Sender: LSF System <lsfadmin@hpc.dtu.dk>
+Subject: Job 28427082: <crossview_eval_v2> in cluster <dcc> Done
+
+Job <crossview_eval_v2> was submitted from host <hpclogin1> by user <s250778> in cluster <dcc> at Wed May 13 23:08:38 2026
+Job was executed on host(s) <6*n-62-20-13>, in queue <gpuv100>, as user <s250778> in cluster <dcc> at Thu May 14 00:15:37 2026
+</zhome/b0/c/220061> was used as the home directory.
+</zhome/b0/c/220061/Multimodal-Geo-Spatial-Learning> was used as the working directory.
+Started at Thu May 14 00:15:37 2026
+Terminated at Thu May 14 01:28:30 2026
+Results reported at Thu May 14 01:28:30 2026
+
+Your job looked like:
+
+------------------------------------------------------------
+# LSBATCH: User input
+#!/bin/bash
+#BSUB -J crossview_eval_v2
+#BSUB -q gpuv100
+#BSUB -gpu "num=1:mode=exclusive_process"
+#BSUB -R "select[gpu32gb]"
+#BSUB -n 6
+#BSUB -R "span[hosts=1] rusage[mem=32GB]"
+#BSUB -W 02:00
+#BSUB -o logs/crossview_eval_v2_%J.out
+#BSUB -e logs/crossview_eval_v2_%J.err
+
+mkdir -p logs eval_results
+cd ~/Multimodal-Geo-Spatial-Learning
+
+echo "Job started at $(date)"
+echo "Running on $(hostname)"
+nvidia-smi
+
+# v2 best checkpoint (ConvNeXt-Base fb_in22k, 224px, epoch 30)
+CKPT="checkpoints/crossview/cv_v2_base_20260422_230539/best.pt"
+
+echo "Evaluating v2 checkpoint: $CKPT"
+echo "Protocol: --no-pool (18,689 per-image queries) + --landmark-agg max (1,000 per-landmark)"
+
+uv run python -m mmgeo.crossview.eval \
+    --config configs/crossview_convnext_base.yaml \
+    --checkpoint "$CKPT" \
+    --no-pool \
+    --landmark-agg max \
+    --output "eval_results/eval_v2_$(date +%Y%m%d_%H%M%S).json"
+
+echo "Job finished at $(date)"
+
+------------------------------------------------------------
+
+Successfully completed.
+
+Resource usage summary:
+
+    CPU time :                                   12916.00 sec.
+    Max Memory :                                 8489 MB
+    Average Memory :                             6034.23 MB
+    Total Requested Memory :                     196608.00 MB
+    Delta Memory :                               188119.00 MB
+    Max Swap :                                   -
+    Max Processes :                              11
+    Max Threads :                                37
+    Run time :                                   4373 sec.
+    Turnaround time :                            8392 sec.
+
+The output (if any) is above this job summary.
+
+
+
+PS:
+
+Read file <logs/crossview_eval_v2_28427082.err> for stderr output of this job.
+
