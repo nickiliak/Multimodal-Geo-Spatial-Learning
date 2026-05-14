@@ -21,7 +21,7 @@ from torch.utils.data import DataLoader
 from tqdm import tqdm
 
 
-DEFAULT_RECALL_KS = [1, 5, 10]
+DEFAULT_RECALL_KS = [1, 10, 25]
 DEFAULT_MAP_K = 1000
 
 

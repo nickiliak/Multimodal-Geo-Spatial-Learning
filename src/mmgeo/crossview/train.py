@@ -483,7 +483,7 @@ def _run_eval(
     eval_batch = cfg["training"].get("eval_batch_size", 128)
     num_workers = cfg["training"].get("num_workers", 4)
 
-    ks = eval_cfg.get("recall_ks", [1, 5, 10])
+    ks = eval_cfg.get("recall_ks", [1, 10, 25])
     map_k = eval_cfg.get("map_k", 1000)
     directions = eval_cfg.get("directions", ["g2s", "s2g"])
     include_index = bool(eval_cfg.get("include_index", True))

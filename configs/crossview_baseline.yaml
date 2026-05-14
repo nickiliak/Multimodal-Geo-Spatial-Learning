@@ -29,7 +29,7 @@ training:
   eval_batch_size: 256    # larger batch for eval (no grads)
 
 evaluation:
-  recall_ks: [1, 5, 10]
+  recall_ks: [1, 10, 25]
   map_k: 1000                 # mAP truncation depth
   directions: ["g2s", "s2g"]  # ground→satellite and satellite→ground
   include_index: true         # extend gallery with unlabeled index-split distractors

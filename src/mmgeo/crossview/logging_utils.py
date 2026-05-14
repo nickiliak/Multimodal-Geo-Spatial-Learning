@@ -204,7 +204,7 @@ class RunLogger:
                 if hn_cfg.get("enabled") else ""
             ),
             f"- **Eval directions:** {eval_cfg.get('directions', ['g2s', 's2g'])}",
-            f"- **Eval metrics:** recall_ks={eval_cfg.get('recall_ks', [1,5,10])}, map_k={eval_cfg.get('map_k', 1000)}",
+            f"- **Eval metrics:** recall_ks={eval_cfg.get('recall_ks', [1,10,25])}, map_k={eval_cfg.get('map_k', 1000)}",
             "",
             "## Runtime",
             f"- Total wall time: **{runtime_sec/60:.1f} min** ({runtime_sec:.0f} s)",

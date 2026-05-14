@@ -1,10 +1,9 @@
 #!/bin/bash
 #BSUB -J crossview_eval_v3
-#BSUB -q gpuv100
+#BSUB -q gpul40s
 #BSUB -gpu "num=1:mode=exclusive_process"
-#BSUB -R "select[gpu32gb]"
 #BSUB -n 6
-#BSUB -R "span[hosts=1] rusage[mem=32GB]"
+#BSUB -R "span[hosts=1] rusage[mem=8GB]"
 #BSUB -W 08:00
 #BSUB -o logs/crossview_eval_v3_%J.out
 #BSUB -e logs/crossview_eval_v3_%J.err
