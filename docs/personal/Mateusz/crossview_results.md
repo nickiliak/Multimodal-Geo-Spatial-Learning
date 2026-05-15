@@ -20,14 +20,14 @@ For each of the **1,000** query landmarks, all K ground-image embeddings are use
 
 ### Ground → Satellite (g2s) — Master Table
 
-All three eval protocols side-by-side. Columns: per-image (img), per-landmark mean-agg (mean), per-landmark max-agg (max).
+All eval protocols side-by-side. Metrics: R@1 / R@10 / R@25.
 
-| Model | R@1 img | R@1 mean | R@1 attn | R@1 max | R@5 img | R@5 mean | R@5 max | R@10 img | R@10 mean | R@10 max | mAP img | mAP mean | mAP max |
-|-------|---------|----------|----------|---------|---------|----------|---------|----------|-----------|----------|---------|----------|---------|
-| Zero-shot | 0.34% | 0.40% | 0.30% | 0.30% | 1.23% | 1.20% | 0.90% | 2.14% | 1.80% | 2.10% | 1.00% | 0.89% | 0.89% |
-| v2 (ep30) | 7.21% | 17.60% | 17.50% | **9.00%** | 18.52% | 33.40% | 20.30% | 25.31% | **42.20%** | 27.20% | 13.10% | 25.50% | 15.21% |
-| v3 (ep36) | **8.58%** | 18.40% | 18.20% | 7.10% | 18.13% | 31.70% | 14.90% | 22.29% | 37.20% | 18.80% | 13.25% | 25.12% | 11.10% |
-| v4 (ep36) | 7.63% | **18.50%** | 18.20% | 8.10% | **19.02%** | **32.40%** | 18.50% | 24.57% | 39.60% | 25.30% | **13.34%** | **25.33%** | 13.72% |
+| Model | R@1 img | R@1 mean | R@1 attn | R@1 max | R@10 img | R@10 mean | R@10 max | R@25 img | R@25 mean | R@25 max | mAP img | mAP mean | mAP max |
+|-------|---------|----------|----------|---------|----------|-----------|----------|----------|-----------|----------|---------|----------|---------|
+| Zero-shot | 0.34% | 0.40% | 0.30% | 0.30% | 2.14% | 1.80% | 2.10% | 3.88% | 3.50% | 3.30% | 1.00% | 0.89% | 0.89% |
+| v2 (ep30) | 7.21% | 17.60% | 17.50% | **9.00%** | 25.32% | **42.20%** | 27.20% | 34.35% | **51.50%** | 37.00% | 13.10% | 25.50% | 15.21% |
+| v3 (ep36) | **8.58%** | 18.40% | 18.20% | 7.10% | 22.29% | 37.20% | 18.80% | 27.47% | 43.60% | 25.40% | 13.25% | 25.12% | 11.10% |
+| v4 (ep36) | 7.63% | **18.50%** | 18.20% | 8.10% | 24.58% | 39.60% | 25.30% | **33.13%** | 50.10% | **33.40%** | **13.34%** | **25.33%** | 13.72% |
 
 *per-image* = each of 18,688 ground images is an independent query (paper-comparable).
 *mean-agg* = 1,000 landmarks, average score across all ground photos (team primary; ≡ embedding-space mean-pooling for ranking).
@@ -40,12 +40,12 @@ All three eval protocols side-by-side. Columns: per-image (img), per-landmark me
 
 Per-image eval (18,688 queries) — paper-comparable:
 
-| Model | Backbone | img_size | Epochs | R@1 | R@5 | R@10 | mAP@1k | Notes |
-|-------|----------|----------|--------|-----|-----|------|--------|-------|
-| Zero-shot | ConvNeXt-B (fb_in22k_ft_1k_384) | 384 | 0 | 0.34% | 1.23% | 2.14% | 1.00% | ImageNet weights only |
-| v2 (ep30) | ConvNeXt-B (fb_in22k) | 224 | 35 | 7.21% | 18.52% | 25.31% | 13.10% | ep30 best |
-| v3 (ep36) | ConvNeXt-B (fb_in22k_ft_1k_384) | 384 | 36 | **8.58%** | 18.13% | 22.29% | 13.25% | ep36 best |
-| v4 (ep36) | ConvNeXt-B (fb_in22k) | 224 | 36 | 7.63% | 19.02% | 24.57% | 13.34% | ep36 best |
+| Model | Backbone | img_size | Epochs | R@1 | R@10 | R@25 | mAP@1k | Notes |
+|-------|----------|----------|--------|-----|------|------|--------|-------|
+| Zero-shot | ConvNeXt-B (fb_in22k_ft_1k_384) | 384 | 0 | 0.34% | 2.14% | 3.88% | 1.00% | ImageNet weights only |
+| v2 (ep30) | ConvNeXt-B (fb_in22k) | 224 | 35 | 7.21% | 25.32% | 34.35% | 13.10% | ep30 best |
+| v3 (ep36) | ConvNeXt-B (fb_in22k_ft_1k_384) | 384 | 36 | **8.58%** | 22.29% | 27.47% | 13.25% | ep36 best |
+| v4 (ep36) | ConvNeXt-B (fb_in22k) | 224 | 36 | 7.63% | 24.58% | 33.13% | 13.34% | ep36 best |
 | MMCLIP† | CLIP ViT-L | — | zero-shot | 20.5% | — | — | — | no MML training |
 | GeoClip† | CLIP ViT-L + geo | — | zero-shot | 21.1% | — | — | — | no MML training |
 
@@ -54,21 +54,21 @@ Each landmark counts once regardless of photo count.
 
 **Max-agg** ("any photo wins" — upper bound on landmark coverage):
 
-| Model | R@1 | R@5 | R@10 | mAP@1k |
-|-------|-----|-----|------|--------|
-| Zero-shot | 0.30% | 0.90% | 2.10% | 0.89% |
-| v2 (ep30) | **9.00%** | 20.30% | 27.20% | 15.21% |
-| v3 (ep36) | 7.10% | 14.90% | 18.80% | 11.10% |
-| v4 (ep36) | 8.10% | 18.50% | 25.30% | 13.72% |
+| Model | R@1 | R@10 | R@25 | mAP@1k |
+|-------|-----|------|------|--------|
+| Zero-shot | 0.30% | 2.10% | 3.30% | 0.89% |
+| v2 (ep30) | **9.00%** | 27.20% | 37.00% | 15.21% |
+| v3 (ep36) | 7.10% | 18.80% | 25.40% | 11.10% |
+| v4 (ep36) | 8.10% | 25.30% | 33.40% | 13.72% |
 
 **Mean-agg** ("average score across all photos" — what the team uses; mathematically equivalent to mean-pooling embeddings):
 
-| Model | R@1 | R@5 | R@10 | mAP@1k |
-|-------|-----|-----|------|--------|
-| Zero-shot | 0.40% | 1.20% | 1.80% | 0.89% |
-| v2 (ep30) | 17.60% | 33.40% | **42.20%** | 25.50% |
-| v3 (ep36) | 18.40% | 31.70% | 37.20% | 25.12% |
-| v4 (ep36) | **18.50%** | **32.40%** | 39.60% | **25.33%** |
+| Model | R@1 | R@10 | R@25 | mAP@1k |
+|-------|-----|------|------|--------|
+| Zero-shot | 0.40% | 1.80% | 3.50% | 0.89% |
+| v2 (ep30) | 17.60% | **42.20%** | **51.50%** | 25.50% |
+| v3 (ep36) | 18.40% | 37.20% | 43.60% | 25.12% |
+| v4 (ep36) | **18.50%** | 39.60% | 50.10% | **25.33%** |
 
 Mean-agg: v4 ≈ v3 > v2. Max-agg (landmark coverage): v2 > v4 > v3 — reversed.
 Note: s2g per-lm max = per-lm mean (one satellite per landmark), shown in s2g table below.
@@ -77,12 +77,12 @@ Note: s2g per-lm max = per-lm mean (one satellite per landmark), shown in s2g ta
 
 Photos weighted by softmax cosine-similarity to the landmark embedding centroid. Representative photos (close to centre) get more weight; unusual viewpoints get less.
 
-| Model | R@1 | R@5 | R@10 | mAP@1k |
-|-------|-----|-----|------|--------|
-| Zero-shot | 0.30% | 1.40% | 1.80% | 0.85% |
-| v2 (ep30) | 17.50% | 33.10% | 42.10% | 25.21% |
-| v3 (ep36) | 18.20% | 32.00% | 37.20% | 24.85% |
-| v4 (ep36) | 18.20% | 32.10% | 39.20% | 25.21% |
+| Model | R@1 | R@10 | R@25 | mAP@1k |
+|-------|-----|------|------|--------|
+| Zero-shot | 0.30% | 1.80% | 3.50% | 0.85% |
+| v2 (ep30) | 17.50% | 42.10% | 51.00% | 25.21% |
+| v3 (ep36) | 18.20% | 37.20% | 43.30% | 24.85% |
+| v4 (ep36) | 18.20% | 39.20% | 49.60% | 25.21% |
 
 **Finding: attn < mean for all trained models** (−0.1% to −0.3% R@1). Simple mean wins.
 With K≈18 diverse photos, the mean is already stable. Attention down-weights unusual viewpoints,
@@ -96,12 +96,12 @@ only if a landmark had truly bad/unrelated photos mixed in.
 
 Per-image eval (= per-landmark for s2g — one satellite per landmark, nothing to aggregate):
 
-| Model | R@1 | R@5 | R@10 | mAP@1k |
-|-------|-----|-----|------|--------|
-| Zero-shot | 0.00% | 0.30% | 0.80% | 0.05% |
-| v2 (ep30) | 5.20% | 14.40% | 18.70% | 2.66% |
-| v3 (ep36) | **5.40%** | 11.10% | 13.70% | 1.85% |
-| v4 (ep36) | 4.00% | 11.30% | 16.80% | 2.12% |
+| Model | R@1 | R@10 | R@25 | mAP@1k |
+|-------|-----|------|------|--------|
+| Zero-shot | 0.00% | 0.80% | 1.60% | 0.05% |
+| v2 (ep30) | 5.30% | 18.70% | 28.10% | 2.66% |
+| v3 (ep36) | **5.50%** | 13.70% | 20.50% | 1.85% |
+| v4 (ep36) | 4.00% | 16.80% | 25.50% | 2.12% |
 
 (Per-lm numbers match per-image exactly; s2g has one satellite query per landmark.)
 
@@ -111,12 +111,12 @@ Per-image eval (= per-landmark for s2g — one satellite per landmark, nothing t
 
 Evals at epochs 9, 18, 27, 36 (unpooled, g2s and s2g):
 
-| Epoch | g2s R@1 | g2s R@5 | g2s R@10 | g2s mAP@1k | s2g R@1 |
-|-------|---------|---------|---------|-----------|---------|
-| 9 | 6.61% | 14.92% | 20.18% | 11.07% | 4.30% |
-| 18 | 8.32% | 18.41% | 23.51% | 13.39% | 5.00% |
-| 27 | 8.42% | 18.01% | 22.49% | 13.17% | 5.50% |
-| **36** | **8.58%** | **18.13%** | **22.29%** | **13.25%** | **5.40%** |
+| Epoch | g2s R@1 | g2s R@10 | g2s mAP@1k | s2g R@1 |
+|-------|---------|----------|-----------|---------|
+| 9 | 6.61% | 20.18% | 11.07% | 4.30% |
+| 18 | 8.32% | 23.51% | 13.39% | 5.00% |
+| 27 | 8.42% | 22.49% | 13.17% | 5.50% |
+| **36** | **8.58%** | **22.29%** | **13.25%** | **5.50%** |
 
 Most improvement happened by epoch 18. Final 18 epochs added only +0.26% g2s R@1.
 
