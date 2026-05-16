@@ -51,5 +51,4 @@ checkpoints/
 # HPC job logs (LSF/Slurm)
 Output_*.err
 Output_*.out
-logs/*.err
-logs/*.out
+logs/
