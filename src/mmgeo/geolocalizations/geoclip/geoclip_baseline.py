@@ -258,7 +258,7 @@ class NewGeoClipBaseline:
             i = j + 1
 
         all_preds: list[np.ndarray] = []
-        for start, end in tqdm(batches, desc="Predicting", unit="batch"):
+        for start, end in batches:
             batch_paths = image_paths[start:end]
             batch_lids = torch.as_tensor(
                 lids[start:end], dtype=torch.long, device=self.device
@@ -356,6 +356,91 @@ def load_query_data(
             true_coords[len(image_paths)-1,:] = true_coordsmerged[j,:]
             landmark_ids[len(image_paths)-1] = landmark_idsmerged[j]
 
+    return image_paths, true_coords, landmark_ids
+
+def load_query_data2(
+    data_root: Path,
+) -> tuple[list[Path], np.ndarray, np.ndarray]:
+    """Load query image paths, ground-truth coordinates, and landmark IDs.
+
+    Picks the first ground image per query landmark. Image paths use the
+    3-level hex-prefix sharding scheme: ``ground/{h[0]}/{h[1]}/{h[2]}/{h}.jpg``.
+
+    Returns
+    -------
+    image_paths : list[Path]
+        One image path per query landmark.
+    true_coords : np.ndarray, shape (n, 2)
+        Ground-truth ``[[lat, lon], ...]``.
+    landmark_ids : np.ndarray, shape (n,)
+    """
+    query_df = pd.read_csv(data_root / "query" / "mml_query.csv")
+    ground_df = pd.read_csv(data_root / "query" / "mml_query_ground.csv")
+    merged = query_df.merge(ground_df, on="landmark_id")
+
+    true_coordsmerged = merged[["lat", "lon"]].values
+    landmark_idsmerged = merged["landmark_id"].values
+    image_paths: list[Path] = []
+    n_images = sum(len(str(r).split()) for r in merged["images"])
+    true_coords = np.zeros((n_images, 2))
+    landmark_ids = np.zeros((n_images,), dtype=int)
+    for j, row in merged.iterrows():
+
+        for i in range(len(str(row["images"]).split())):
+            hex_id = str(row["images"]).split()[i]
+            path = (
+                data_root
+                / "query"
+                / "ground"
+                / hex_id[0]
+                / hex_id[1]
+                / hex_id[2]
+                / f"{hex_id}.jpg"
+            )
+            image_paths.append(path)
+            true_coords[len(image_paths)-1,:] = true_coordsmerged[j,:]
+            landmark_ids[len(image_paths)-1] = landmark_idsmerged[j]
+
+    return image_paths, true_coordsmerged, landmark_ids
+
+
+def load_query_data3(
+    data_root: Path,
+    imagesperlandmark: int = 1,
+) -> tuple[list[Path], np.ndarray, np.ndarray]:
+    query_df = pd.read_csv(data_root / "query" / "mml_query.csv")
+    ground_df = pd.read_csv(data_root / "query" / "mml_query_ground.csv")
+    merged = query_df.merge(ground_df, on="landmark_id")
+
+    image_paths: list[Path] = []
+    true_coords_list: list[list[float]] = []
+    landmark_ids_list: list[int] = []
+
+    for _, row in merged.iterrows():
+        hex_ids = str(row["images"]).split()
+        if len(hex_ids) < imagesperlandmark:
+            continue
+
+        images_for_landmark = 0
+        for i,hex_id in enumerate(hex_ids):
+            path = (
+                data_root
+                / "query"
+                / "ground"
+                / hex_id[0]
+                / hex_id[1]
+                / hex_id[2]
+                / f"{hex_id}.jpg"
+            )
+            image_paths.append(path)
+            true_coords_list.append([row["lat"], row["lon"]])
+            landmark_ids_list.append(row["landmark_id"])
+            images_for_landmark += 1
+            if images_for_landmark == imagesperlandmark:
+                break
+
+    true_coords = np.array(true_coords_list)      # shape (n, 2)
+    landmark_ids = np.array(landmark_ids_list)    # shape (n,)
     return image_paths, true_coords, landmark_ids
 
 

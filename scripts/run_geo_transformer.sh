@@ -1,7 +1,7 @@
 #!/bin/sh
 ### LSF Queue Options
 #BSUB -q gpuv100
-#BSUB -J geoclip_zeroshot
+#BSUB -J geoclip_transformer
 #BSUB -n 4
 #BSUB -R "span[hosts=1]"
 #BSUB -R "rusage[mem=4GB]"
@@ -37,13 +37,13 @@ assert torch.cuda.is_available(), 'CUDA unavailable'
     exit 1
 }
 
-echo ">>> Running GeoClip zero-shot notebook..."
+echo ">>> Running GeoClip transformer notebook..."
 uv run --no-sync jupyter nbconvert \
     --to notebook \
     --execute \
     --inplace \
     --ExecutePreprocessor.timeout=3600 \
     --ExecutePreprocessor.cwd="$(pwd)/notebooks/team" \
-    notebooks/team/03_geoclip_zeroshotiq.ipynb
+    notebooks/team/03_geoclip_transformeriq.ipynb
 
 echo "Done."
